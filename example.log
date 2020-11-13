@@ -1,0 +1,36 @@
+{
+  "timestamp": {
+    "seconds": 1605277104,
+    "nanos": 408000000
+  },
+  "severity": "INFO",
+  "message": "Starting",
+  "context": {}
+}
+{
+  "timestamp": {
+    "seconds": 1605277104,
+    "nanos": 433000000
+  },
+  "severity": "INFO",
+  "message": "Log stats: Total count \u003d 1",
+  "context": {}
+}
+{
+  "timestamp": {
+    "seconds": 1605277105,
+    "nanos": 689000000
+  },
+  "severity": "INFO",
+  "message": "No ktor.deployment.watch patterns match classpath entries, automatic reload is not active",
+  "context": {}
+}
+{
+  "timestamp": {
+    "seconds": 1605277107,
+    "nanos": 234000000
+  },
+  "severity": "INFO",
+  "message": "Responding at http://0.0.0.0:8080",
+  "context": {}
+}
