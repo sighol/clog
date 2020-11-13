@@ -165,6 +165,8 @@ fn root<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
 
 fn main() {
     use std::io::{self, prelude::*};
+    let mut t = term::stdout().expect("Could not unwrap stdout()");
+
     let mut parser = Parser::new();
     for line in io::stdin().lock().lines() {
         let unwrapped = line.unwrap();
@@ -172,7 +174,16 @@ fn main() {
         match answer {
             ParserOutput::None => (),
             ParserOutput::Text(s) => println!("{}", s),
-            ParserOutput::Log(l) => println!("{}", l),
+            ParserOutput::Log(l) => {
+                let sev = l.severity.to_lowercase();
+                if sev.contains("warn") { t.fg(term::color::YELLOW).unwrap() }
+                if sev.contains("error") { t.fg(term::color::RED).unwrap() }
+                if sev.contains("info") { t.fg(term::color::GREEN).unwrap() }
+                if sev.contains("debug") { t.fg(term::color::BRIGHT_BLACK).unwrap() }
+                if sev.contains("fatal") { t.fg(term::color::MAGENTA).unwrap() }
+                println!("{}", l);
+                t.reset().unwrap();
+            },
         }
     }
 }
@@ -186,7 +197,13 @@ struct LogLine {
 
 impl std::fmt::Display for LogLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} [{}] {}", self.time, self.severity, self.message)
+        write!(
+            f,
+            "{} [{}] {}",
+            self.time,
+            self.severity,
+            self.message.replace("\\n", "\n").replace("\\t", "\t")
+        )
     }
 }
 
