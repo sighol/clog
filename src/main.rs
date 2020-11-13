@@ -5,16 +5,48 @@ use chrono::Utc;
 use nom::{
     branch::alt,
     bytes::complete::{escaped, tag, take_while},
-    character::complete::{alphanumeric1, anychar, char, none_of, one_of},
+    character::complete::{char, none_of, one_of},
     combinator::{cut, map, opt, value},
-    error::{context, convert_error, ContextError, ErrorKind, ParseError, VerboseError},
+    error::{context, ContextError, ErrorKind, ParseError},
     multi::separated_list0,
     number::complete::double,
     sequence::{delimited, preceded, separated_pair, terminated},
-    Err, IResult,
+    IResult,
 };
 use std::collections::HashMap;
+use std::error::Error;
 use std::str;
+
+#[derive(Debug)]
+struct StringError {
+    message: String,
+}
+
+impl std::fmt::Display for StringError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "String error: {}", self.message)
+    }
+}
+
+impl Error for StringError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}
+
+impl StringError {
+    fn new(message: String) -> Self {
+        StringError { message: message }
+    }
+
+    fn str(message: &str) -> Self {
+        Self::new(message.to_string())
+    }
+
+    fn boxed(message: &str) -> Box<Self> {
+        Box::new(Self::str(message))
+    }
+}
 
 #[derive(Debug, PartialEq)]
 pub enum JsonValue {
@@ -23,6 +55,34 @@ pub enum JsonValue {
     Num(f64),
     Array(Vec<JsonValue>),
     Object(HashMap<String, JsonValue>),
+}
+
+impl JsonValue {
+    fn map_value(&self, key: &str) -> Result<&JsonValue, Box<dyn Error>> {
+        let map = match self {
+            JsonValue::Object(x) => x,
+            _ => return Err(StringError::boxed("Something is wrong")),
+        };
+
+        match map.get(key) {
+            Some(value) => Ok(value),
+            None => Err(StringError::boxed("Key not found")),
+        }
+    }
+
+    fn int_value(&self) -> Result<f64, Box<dyn Error>> {
+        match self {
+            JsonValue::Num(x) => Ok(*x as f64),
+            _ => Err(StringError::boxed("Value is not a number")),
+        }
+    }
+
+    fn str_value(&self) -> Result<String, Box<dyn Error>> {
+        match self {
+            JsonValue::Str(x) => Ok(x.clone()),
+            _ => Err(StringError::boxed("Value is not a string")),
+        }
+    }
 }
 
 fn space<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
@@ -111,8 +171,8 @@ fn main() {
         let answer = parser.add(&unwrapped);
         match answer {
             ParserOutput::None => (),
-            ParserOutput::Text(s) => println!("Success: {}", s),
-            ParserOutput::Log(l) => l.println(),
+            ParserOutput::Text(s) => println!("{}", s),
+            ParserOutput::Log(l) => println!("{}", l),
         }
     }
 }
@@ -124,9 +184,9 @@ struct LogLine {
     pub message: String,
 }
 
-impl LogLine {
-    fn println(&self) {
-        println!("{} [{}] {}", self.time, self.severity, self.message)
+impl std::fmt::Display for LogLine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} [{}] {}", self.time, self.severity, self.message)
     }
 }
 
@@ -141,34 +201,21 @@ struct Parser {
     buffer: String,
 }
 
-fn get_log_line(parsed: JsonValue) -> Result<LogLine, ()> {
-    if let JsonValue::Object(map) = parsed {
-        let time_json = map.get("timestamp").unwrap();
-        if let JsonValue::Object(time_map) = time_json {
-            let seconds = time_map.get("seconds").unwrap();
-            let nanos = time_map.get("nanos").unwrap();
-            if let JsonValue::Num(seconds_int) = seconds {
-                if let JsonValue::Num(nanos_int) = nanos {
-                    let start = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
-                    let duration = Duration::seconds(*seconds_int as i64)
-                        + Duration::nanoseconds(*nanos_int as i64);
-                    let time = start + duration;
-
-                    if let JsonValue::Str(severity) = map.get("severity").unwrap() {
-                        if let JsonValue::Str(message) = map.get("message").unwrap() {
-                            return Ok(LogLine {
-                                time: time,
-                                message: message.to_string(),
-                                severity: severity.to_string(),
-                            });
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Err(())
+fn get_log_line(parsed: JsonValue) -> Result<LogLine, Box<dyn Error>> {
+    let time_json = parsed.map_value("timestamp")?;
+    let seconds_value = time_json.map_value("seconds")?.int_value()?;
+    let nanos_value = time_json.map_value("nanos")?.int_value()?;
+    let start = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
+    let duration =
+        Duration::seconds(seconds_value as i64) + Duration::nanoseconds(nanos_value as i64);
+    let time = start + duration;
+    let severity = parsed.map_value("severity")?.str_value()?;
+    let message = parsed.map_value("message")?.str_value()?;
+    return Ok(LogLine {
+        time: time,
+        message: message.to_string(),
+        severity: severity.to_string(),
+    });
 }
 
 impl Parser {
@@ -189,13 +236,20 @@ impl Parser {
         let result = root::<(&str, ErrorKind)>(&self.buffer.trim());
         match result {
             Ok(x) => {
-                let output = format!("{:#?}", x);
-                let log_line = get_log_line(x.1).unwrap();
+                let output = match get_log_line(x.1) {
+                    Ok(x) => ParserOutput::Log(x),
+                    Err(_) => ParserOutput::Text(self.buffer.clone()),
+                };
                 self.buffer.clear();
-                return ParserOutput::Log(log_line);
+                output
             }
-            Err(x) => {
-                let output = format!("{:#?}", x);
+            Err(_) => {
+                if line == "}" {
+                    // Most probably, we have failed to parse something prior. Release everything and try again.
+                    let output = ParserOutput::Text(self.buffer.clone());
+                    self.buffer.clear();
+                    return output;
+                }
                 ParserOutput::None
             }
         }
@@ -236,7 +290,7 @@ mod test {
     fn respond_to_text_input() {
         let mut parser = Parser::new();
         assert_eq!(
-            ParserOutput::Line("Hello world".to_string()),
+            ParserOutput::Text("Hello world".to_string()),
             parser.add("Hello world")
         );
     }

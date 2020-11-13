@@ -4,8 +4,7 @@
     "nanos": 408000000
   },
   "severity": "INFO",
-  "message": "Starting",
-  "context": {}
+  "message": "Starting"
 }
 {
   "timestamp": {
