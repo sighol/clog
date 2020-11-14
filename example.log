@@ -21,7 +21,7 @@
     "nanos": 689000000
   },
   "severity": "INFO",
-  "message": "No ktor.deployment.watch patterns match classpath entries, automatic reload is not active",
+  "message": "No ktor.deployment.watch \\ patterns match classpath entries, automatic reload is not active",
   "context": {}
 }
 {
@@ -39,6 +39,11 @@
     "nanos": 234000000
   },
   "severity": "debug",
-  "message": "Testing testing",
+  "message": "Testing",
   "context": {}
 }
+
+
+
+{  "timestamp": {    "seconds": 1605277107,    "nanos": 234000000  },  "severity": "debug",  "message": "1" }
+{  "timestamp": {    "seconds": 1605277107,    "nanos": 234000000  },  "severity": "debug",  "message": "2" }
