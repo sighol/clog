@@ -98,12 +98,7 @@ fn hash<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, HashMap<Stri
         cut(terminated(
             map(
                 separated_list0(preceded(space, char(',')), key_value),
-                |tuple_vec| {
-                    tuple_vec
-                        .into_iter()
-                        .map(|(k, v)| (String::from(k), v))
-                        .collect()
-                },
+                |tuple_vec| tuple_vec.into_iter().collect(),
             ),
             preceded(space, char('}')),
         )),
