@@ -88,6 +88,7 @@ impl Parser {
         use nom::Err::{Error, Failure, Incomplete};
 
         self.buffer.push_str(line);
+        self.buffer.push_str("\n");
 
         let result = root::<(&str, ErrorKind)>(&self.buffer);
         match result {
@@ -138,7 +139,7 @@ fn print(
 ) {
     match answer {
         ParserOutput::None => (),
-        ParserOutput::Text(s) => println!("{}", s),
+        ParserOutput::Text(s) => print!("{}", s),
         ParserOutput::Log(l) => {
             let sev = l.severity.to_lowercase();
             if sev.contains("warn") {
@@ -197,7 +198,7 @@ mod test {
     fn respond_to_text_input() {
         let mut parser = Parser::new();
         assert_eq!(
-            ParserOutput::Text("Hello world".to_string()).to_string(),
+            ParserOutput::Text("Hello world\n".to_string()).to_string(),
             parser.add("Hello world")[0].to_string()
         );
     }
