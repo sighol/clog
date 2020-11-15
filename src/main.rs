@@ -18,13 +18,7 @@ struct LogLine {
 
 impl std::fmt::Display for LogLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} [{}] {}",
-            self.time,
-            self.severity,
-            self.message.replace("\\n", "\n").replace("\\t", "\t")
-        )
+        write!(f, "{} [{}] {}", self.time, self.severity, self.message,)
     }
 }
 
@@ -88,7 +82,6 @@ impl Parser {
         use nom::Err::{Error, Failure, Incomplete};
 
         self.buffer.push_str(line);
-        self.buffer.push_str("\n");
 
         let result = root::<(&str, ErrorKind)>(&self.buffer);
         match result {
@@ -97,7 +90,7 @@ impl Parser {
                     Ok(x) => ParserOutput::Log(x),
                     Err(_) => ParserOutput::Text(self.buffer.clone()),
                 };
-                let rest = rest.to_string();
+                let rest = rest.trim_start_matches('\n').to_string();
                 self.buffer.clear();
                 let mut output = vec![output];
                 for next_output in self.add(&rest) {
@@ -108,7 +101,7 @@ impl Parser {
                 }
                 output
             }
-            Err(Incomplete(_)) => vec![ParserOutput::None],
+            Err(Incomplete(_)) => vec![],
             Err(Failure(_)) | Err(Error(_)) => {
                 let output = ParserOutput::Text(self.buffer.clone());
                 self.buffer.clear();
@@ -124,7 +117,8 @@ fn main() {
 
     let mut parser = Parser::new();
     for line in io::stdin().lock().lines() {
-        let unwrapped = line.unwrap();
+        let mut unwrapped = line.unwrap().to_string();
+        unwrapped.push_str("\n");
         let answers = parser.add(&unwrapped);
         for answer in answers {
             print(&answer, &mut t);
@@ -157,8 +151,9 @@ fn print(
             if sev.contains("fatal") {
                 t.fg(term::color::MAGENTA).unwrap()
             }
-            println!("{}", l);
+            print!("{}", l);
             t.reset().unwrap();
+            println!("");
         }
     }
 }

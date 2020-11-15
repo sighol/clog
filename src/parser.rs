@@ -156,8 +156,7 @@ fn unicode_letter<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ch
     use nom::bytes::streaming::{tag, take_while_m_n};
 
     let four_digits = |x: &'a str| take_while_m_n(4, 4, |c: char| c.is_digit(16))(x);
-    let my_tag = tag("\\u");
-    let (rest, digits) = preceded(my_tag, four_digits)(i)?;
+    let (rest, digits) = preceded(tag("\\u"), four_digits)(i)?;
     let num = u32::from_str_radix(digits, 16).expect("Couldn't parse str radix");
     let c = std::char::from_u32(num).expect("Couldn't create char from parsed str radix");
     return Ok((rest, c));
