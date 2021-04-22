@@ -1,6 +1,7 @@
 use chrono::prelude::*;
 use chrono::DateTime;
 use chrono::Duration;
+use chrono::Local;
 use chrono::Utc;
 use nom::error::ErrorKind;
 use std::error::Error;
@@ -18,7 +19,10 @@ struct LogLine {
 
 impl std::fmt::Display for LogLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} [{}] {}", self.time, self.severity, self.message,)
+        let tz = Local::now().timezone();
+        let local_time = self.time.with_timezone(&tz);
+
+        write!(f, "{} [{}] {}", local_time, self.severity, self.message,)
     }
 }
 
