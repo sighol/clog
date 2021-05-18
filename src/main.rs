@@ -28,12 +28,20 @@ impl std::fmt::Display for LogLine {
 
 fn get_log_line(parsed: JsonValue) -> Result<LogLine, Box<dyn Error>> {
     let time_json = parsed.map_value("timestamp")?;
-    let seconds_value = time_json.map_value("seconds")?.int_value()?;
-    let nanos_value = time_json.map_value("nanos")?.int_value()?;
-    let start = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
-    let duration =
-        Duration::seconds(seconds_value as i64) + Duration::nanoseconds(nanos_value as i64);
-    let time = start + duration;
+
+    let time: DateTime<Utc> = if let Ok(time_str) = time_json.str_value() {
+        Utc.datetime_from_str(&time_str, "%+")?
+    } else {
+        println!("Found time json!!");
+        let seconds_value = time_json.map_value("seconds")?.int_value()?;
+        println!("Found seconds!!");
+        let nanos_value = time_json.map_value("nanos")?.int_value()?;
+        let start = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
+        let duration =
+            Duration::seconds(seconds_value as i64) + Duration::nanoseconds(nanos_value as i64);
+        start + duration
+    };
+
     let severity = parsed.map_value("severity")?.str_value()?;
     let message = parsed.map_value("message")?.str_value()?;
     return Ok(LogLine {
