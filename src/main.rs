@@ -137,31 +137,41 @@ fn main() {
     print(&parser.flush(), &mut t);
 }
 
-fn print(
-    answer: &ParserOutput,
-    t: &mut Box<dyn term::Terminal<Output = std::io::Stdout> + std::marker::Send>,
-) {
+type Terminal = Box<dyn term::Terminal<Output = std::io::Stdout> + std::marker::Send>;
+
+fn print(answer: &ParserOutput, t: &mut Terminal) {
     match answer {
         ParserOutput::None => (),
         ParserOutput::Text(s) => print!("{}", s),
         ParserOutput::Log(l) => {
-            let sev = l.severity.to_lowercase();
-            if sev.contains("warn") {
-                t.fg(term::color::YELLOW).unwrap()
+            let tz = Local::now().timezone();
+            let local_time = l.time.with_timezone(&tz);
+            t.fg(term::color::GREEN).unwrap();
+            print!("{}", local_time);
+            t.reset().unwrap();
+            t.fg(term::color::BRIGHT_BLACK).unwrap();
+            t.attr(term::Attr::Bold).unwrap();
+            print!(" {:7}", l.severity.to_uppercase());
+
+            t.reset().unwrap();
+            let severity = l.severity.to_lowercase();
+            if severity.contains("warn") {
+                t.fg(term::color::YELLOW).unwrap();
             }
-            if sev.contains("error") {
-                t.fg(term::color::RED).unwrap()
+            if severity.contains("error") {
+                t.fg(term::color::RED).unwrap();
             }
-            if sev.contains("info") {
-                t.fg(term::color::GREEN).unwrap()
+            if severity.contains("info") {
+                // t.fg(term::color::GREEN).unwrap();
             }
-            if sev.contains("debug") {
-                t.fg(term::color::BRIGHT_BLACK).unwrap()
+            if severity.contains("debug") {
+                t.fg(term::color::BRIGHT_BLACK).unwrap();
             }
-            if sev.contains("fatal") {
-                t.fg(term::color::MAGENTA).unwrap()
+            if severity.contains("fatal") {
+                t.fg(term::color::MAGENTA).unwrap();
             }
-            print!("{}", l);
+
+            print!(" {}", l.message);
             t.reset().unwrap();
             println!("");
         }
