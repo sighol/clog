@@ -4,6 +4,7 @@ use chrono::Duration;
 use chrono::Local;
 use chrono::Utc;
 use nom::error::ErrorKind;
+use std::collections::HashMap;
 use std::error::Error;
 use std::str;
 
@@ -15,6 +16,7 @@ struct LogLine {
     pub time: DateTime<Utc>,
     pub severity: String,
     pub message: String,
+    pub context: HashMap<String, String>,
 }
 
 impl std::fmt::Display for LogLine {
@@ -42,10 +44,20 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine, Box<dyn Error>> {
 
     let severity = parsed.map_value("severity")?.str_value()?;
     let message = parsed.map_value("message")?.str_value()?;
+    let context = parsed.map_value("context");
+    let mut context_map = HashMap::<String, String>::new();
+    if let Ok(JsonValue::Object(context_json_map)) = context {
+        for (key, json_value) in context_json_map {
+            if let JsonValue::Str(value) = json_value {
+                context_map.insert(key.clone(), value.clone());
+            }
+        }
+    }
     return Ok(LogLine {
         time: time,
         message: message.to_string(),
         severity: severity.to_string(),
+        context: context_map,
     });
 }
 
@@ -148,11 +160,18 @@ fn print(answer: &ParserOutput, t: &mut Terminal) {
             let local_time = l.time.with_timezone(&tz);
             t.fg(term::color::GREEN).unwrap();
             print!("{}", local_time);
+            if let Some(request_id) = l.context.get("requestId") {
+                t.reset().unwrap();
+                // t.fg(term::color::BRIGHT_BLACK).unwrap();
+                let request_id = request_id[..8].to_string();
+                t.attr(term::Attr::Bold).unwrap();
+                print!(" [{}]", request_id);
+                t.reset().unwrap();
+            }
             t.reset().unwrap();
             t.fg(term::color::BRIGHT_BLACK).unwrap();
             t.attr(term::Attr::Bold).unwrap();
             print!(" {:7}", l.severity.to_uppercase());
-
             t.reset().unwrap();
             let severity = l.severity.to_lowercase();
             if severity.contains("warn") {
