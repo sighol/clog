@@ -1,7 +1,6 @@
 mod parser;
 
 use std::collections::HashMap;
-use std::error::Error;
 use std::str;
 
 use chrono::prelude::*;
@@ -9,6 +8,7 @@ use chrono::DateTime;
 use chrono::Duration;
 use chrono::Local;
 use chrono::Utc;
+use color_eyre::Result;
 use nom::error::ErrorKind;
 
 use parser::{root, JsonValue};
@@ -30,7 +30,7 @@ impl std::fmt::Display for LogLine {
     }
 }
 
-fn get_log_line(parsed: JsonValue) -> Result<LogLine, Box<dyn Error>> {
+fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
     let time_json = parsed.map_value("timestamp")?;
 
     let time: DateTime<Utc> = if let Ok(time_str) = time_json.str_value() {

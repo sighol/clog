@@ -1,10 +1,11 @@
 [package]
-name = "clog"
-version = "0.4.1"
 authors = ["Sigurd Holsen <sigurd.holsen@cognite.com>"]
 edition = "2018"
-
+name = "clog"
+version = "0.4.1"
 [dependencies]
-nom = "6.2.1"
 chrono = "0.4.19"
+color-eyre = "0.5.11"
+eyre = "0.6.5"
+nom = "6.2.1"
 term = "0.7.0"

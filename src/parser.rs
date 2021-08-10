@@ -1,7 +1,8 @@
 use std::collections::HashMap;
-use std::error::Error;
 use std::str;
 
+use color_eyre::Result;
+use eyre::eyre;
 use nom::{
     branch::alt,
     bytes::streaming::take_while,
@@ -21,61 +22,30 @@ pub enum JsonValue {
     Object(HashMap<String, JsonValue>),
 }
 
-#[derive(Debug)]
-pub struct StringError {
-    message: String,
-}
-
-impl std::fmt::Display for StringError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "String error: {}", self.message)
-    }
-}
-
-impl Error for StringError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
-    }
-}
-
-impl StringError {
-    pub fn new(message: String) -> Self {
-        StringError { message: message }
-    }
-
-    pub fn str(message: &str) -> Self {
-        Self::new(message.to_string())
-    }
-
-    pub fn boxed(message: &str) -> Box<Self> {
-        Box::new(Self::str(message))
-    }
-}
-
 impl JsonValue {
-    pub fn map_value(&self, key: &str) -> Result<&JsonValue, Box<dyn Error>> {
+    pub fn map_value(&self, key: &str) -> Result<&JsonValue> {
         let map = match self {
             JsonValue::Object(x) => x,
-            _ => return Err(StringError::boxed("Something is wrong")),
+            _ => return Err(eyre!("map_value on non-object")),
         };
 
         match map.get(key) {
             Some(value) => Ok(value),
-            None => Err(StringError::boxed("Key not found")),
+            None => Err(eyre!("Key not found")),
         }
     }
 
-    pub fn int_value(&self) -> Result<f64, Box<dyn Error>> {
+    pub fn int_value(&self) -> Result<f64> {
         match self {
             JsonValue::Num(x) => Ok(*x as f64),
-            _ => Err(StringError::boxed("Value is not a number")),
+            _ => Err(eyre!("int_value on non-numeric")),
         }
     }
 
-    pub fn str_value(&self) -> Result<String, Box<dyn Error>> {
+    pub fn str_value(&self) -> Result<String> {
         match self {
             JsonValue::Str(x) => Ok(x.clone()),
-            _ => Err(StringError::boxed("Value is not a string")),
+            _ => Err(eyre!("str_value on non-string")),
         }
     }
 }
@@ -162,6 +132,7 @@ fn unicode_letter<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ch
 mod test {
     use super::*;
     use nom::error::ErrorKind;
+
     #[test]
     fn test_nom() {
         use nom::bytes::streaming::escaped;
