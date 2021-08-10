@@ -1,3 +1,4 @@
+#![deny(rust_2021_compatibility)]
 mod parser;
 
 use std::collections::HashMap;
@@ -46,21 +47,24 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
 
     let severity = parsed.map_value("severity")?.str_value()?;
     let message = parsed.map_value("message")?.str_value()?;
-    let context = parsed.map_value("context");
-    let mut context_map = HashMap::<String, String>::new();
-    if let Ok(JsonValue::Object(context_json_map)) = context {
+    let context_value = parsed.map_value("context");
+    let mut context = HashMap::<String, String>::new();
+    // XXX (robertc) this throws away an Err() when the key is not an object,
+    // but the severity and message cases above do not similarly fail
+    // gracefully.
+    if let Ok(JsonValue::Object(context_json_map)) = context_value {
         for (key, json_value) in context_json_map {
             if let JsonValue::Str(value) = json_value {
-                context_map.insert(key.clone(), value.clone());
+                context.insert(key.clone(), value.clone());
             }
         }
     }
-    return Ok(LogLine {
-        time: time,
-        message: message.to_string(),
-        severity: severity.to_string(),
-        context: context_map,
-    });
+    Ok(LogLine {
+        time,
+        message,
+        severity,
+        context,
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -93,7 +97,7 @@ impl Parser {
     }
 
     fn flush(&mut self) -> ParserOutput {
-        if self.buffer.len() == 0 {
+        if self.buffer.is_empty() {
             ParserOutput::None
         } else {
             let output = ParserOutput::Text(self.buffer.to_string());
@@ -142,7 +146,7 @@ fn main() {
     let mut parser = Parser::new();
     for line in io::stdin().lock().lines() {
         let mut unwrapped = line.unwrap().to_string();
-        unwrapped.push_str("\n");
+        unwrapped.push('\n');
         let answers = parser.add(&unwrapped);
         for answer in answers {
             print(&answer, &mut t);
@@ -194,7 +198,7 @@ fn print(answer: &ParserOutput, t: &mut Terminal) {
 
             print!(" {}", l.message);
             t.reset().unwrap();
-            println!("");
+            println!();
         }
     }
 }

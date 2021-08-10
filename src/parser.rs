@@ -81,7 +81,7 @@ fn json_value<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, JsonVa
         space,
         alt((
             map(hash, JsonValue::Object),
-            map(string, |s| JsonValue::Str(s)),
+            map(string, JsonValue::Str),
             map(double, JsonValue::Num),
         )),
     )(i)
@@ -114,7 +114,7 @@ fn parse_str<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, String,
     let string_path = alt((unicode_letter, escaped, any_string_char));
     match many0(string_path)(i) {
         Ok((rest, parts)) => Ok((rest, parts.iter().collect())),
-        Err(x) => return Err(x),
+        Err(x) => Err(x),
     }
 }
 
@@ -125,7 +125,7 @@ fn unicode_letter<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ch
     let (rest, digits) = preceded(tag("\\u"), four_digits)(i)?;
     let num = u32::from_str_radix(digits, 16).expect("Couldn't parse str radix");
     let c = std::char::from_u32(num).expect("Couldn't create char from parsed str radix");
-    return Ok((rest, c));
+    Ok((rest, c))
 }
 
 #[cfg(test)]
