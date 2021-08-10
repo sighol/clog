@@ -130,8 +130,16 @@ fn unicode_letter<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ch
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use nom::error::ErrorKind;
+    use proptest::{
+        collection::{hash_map, vec},
+        num,
+        prelude::*,
+    };
+    use proptest_recurse::{StrategyExt, StrategySet};
+    use serde_json::{Number, Value};
+
+    use super::*;
 
     #[test]
     fn test_nom() {
@@ -166,5 +174,44 @@ mod test {
         let expected = r#"This is a string with '"' quotes."#.to_string();
         let parsed = string::<(&str, ErrorKind)>(input);
         assert_eq!(parsed, Ok(("", expected)));
+    }
+
+    // Property based tests
+    fn arb_json(set: &mut StrategySet) -> SBoxedStrategy<Value> {
+        // Serde can create valid JSON in any shape, so rather than using regexs
+        // to recreate JSON from first principles, we use serde::json::Value.
+        prop_oneof![
+            Just(Value::Null),
+            any::<bool>().prop_map(Value::Bool),
+            any::<i64>().prop_map(|i| Value::Number(Number::from(i))),
+            num::f64::NORMAL.prop_map(|f| Value::Number(Number::from_f64(f).unwrap())),
+            "\\PC*".prop_map(Value::String)
+        ]
+        .prop_mutually_recursive(2, 4, 4, set, |set| {
+            vec(set.get::<Value, _>(arb_json), 0..2)
+                .prop_map(Value::Array)
+                .sboxed()
+        })
+        .prop_mutually_recursive(2, 4, 4, set, arb_json_object)
+    }
+
+    fn arb_json_object(set: &mut StrategySet) -> SBoxedStrategy<Value> {
+        hash_map("\\PC*", set.get::<Value, _>(arb_json), 0..2)
+            .prop_map(|h| Value::Object(h.into_iter().collect()))
+            .sboxed()
+    }
+
+    fn arb_json_str(set: &mut StrategySet) -> impl Strategy<Value = String> {
+        arb_json_object(set).prop_map(|j| j.to_string())
+    }
+
+    proptest! {
+        // This is a positive test: it explores what can be parsed, not what
+        // cannot be parsed. If it fails, something should be parsed and isn't,
+        #[test]
+        fn can_parse(input in arb_json_str(&mut Default::default())){
+            let (remainder, _obj) = root::<(&str, ErrorKind)>(&input)?;
+            prop_assert_eq!("", remainder);
+        }
     }
 }
