@@ -2,6 +2,7 @@
 mod parser;
 
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::str;
 
 use chrono::prelude::*;
@@ -74,13 +75,12 @@ enum ParserOutput {
     Log(LogLine),
 }
 
-impl ParserOutput {
-    #[cfg(test)]
-    fn to_string(&self) -> String {
-        match self {
-            ParserOutput::None => "".to_string(),
-            ParserOutput::Text(s) => s.clone(),
-            ParserOutput::Log(l) => format!("{}", l),
+impl Display for ParserOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            ParserOutput::Log(l) => write!(f, "{}", l),
+            ParserOutput::None => Ok(()),
+            ParserOutput::Text(s) => write!(f, "{}", s),
         }
     }
 }
