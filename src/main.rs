@@ -85,15 +85,14 @@ impl Display for ParserOutput {
     }
 }
 
+#[derive(Default, Debug)]
 struct Parser {
     buffer: String,
 }
 
 impl Parser {
     fn new() -> Self {
-        Parser {
-            buffer: String::new(),
-        }
+        Default::default()
     }
 
     fn flush(&mut self) -> ParserOutput {
