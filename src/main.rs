@@ -3,6 +3,7 @@ mod parser;
 
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::mem::take;
 use std::str;
 
 use chrono::prelude::*;
@@ -99,9 +100,7 @@ impl Parser {
         if self.buffer.is_empty() {
             ParserOutput::None
         } else {
-            let output = ParserOutput::Text(self.buffer.to_string());
-            self.buffer.clear();
-            output
+            ParserOutput::Text(take(&mut self.buffer))
         }
     }
 
