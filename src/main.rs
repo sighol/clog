@@ -1,14 +1,16 @@
+mod parser;
+
+use std::collections::HashMap;
+use std::error::Error;
+use std::str;
+
 use chrono::prelude::*;
 use chrono::DateTime;
 use chrono::Duration;
 use chrono::Local;
 use chrono::Utc;
 use nom::error::ErrorKind;
-use std::collections::HashMap;
-use std::error::Error;
-use std::str;
 
-mod parser;
 use parser::{root, JsonValue};
 
 #[derive(Debug, Clone)]

@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+use std::error::Error;
+use std::str;
+
 use nom::{
     branch::alt,
     bytes::streaming::take_while,
@@ -9,9 +13,6 @@ use nom::{
     sequence::{preceded, separated_pair, terminated},
     IResult,
 };
-use std::collections::HashMap;
-use std::error::Error;
-use std::str;
 
 #[derive(Debug, PartialEq)]
 pub enum JsonValue {
