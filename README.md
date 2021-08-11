@@ -11,7 +11,7 @@ It will display the time in the local time zone, the request id if it exists, th
 ## Installation
 
 ```sh
-cargo install --git https://github.com/cognitedata/clog
+cargo install --git https://github.com/sighol/clog
 ```
 
 ## Usage with kubectl
