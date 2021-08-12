@@ -49,6 +49,11 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
 
     let severity = parsed.map_value("severity")?.str_value()?;
     let message = parsed.map_value("message")?.str_value()?;
+    let message = if let Ok(exception_message) = parsed.map_value("exc_info") {
+        format!("{}\n{}", message, exception_message.str_value()?)
+    } else {
+        message
+    };
     let context_value = parsed.map_value("context");
     let mut context = HashMap::<String, String>::new();
     // XXX (robertc) this throws away an Err() when the key is not an object,
