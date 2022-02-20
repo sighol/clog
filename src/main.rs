@@ -33,8 +33,22 @@ impl std::fmt::Display for LogLine {
     }
 }
 
+fn bunyan_to_level(level: i32) -> &'static str {
+    match level {
+        50 => "error",
+        40 => "warn",
+        30 => "info",
+        20 => "debug",
+        10 => "tracing",
+        _ => "unknown",
+    }
+}
+
 fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
-    let time_json = parsed.map_value("timestamp")?;
+    let time_json = parsed
+        .map_value("timestamp")
+        .or_else(|_| parsed.map_value("time"))?;
+    println!("{:?}", time_json);
 
     let time: DateTime<Utc> = if let Ok(time_str) = time_json.str_value() {
         Utc.datetime_from_str(&time_str, "%+")?
@@ -47,8 +61,21 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
         start + duration
     };
 
-    let severity = parsed.map_value("severity")?.str_value()?;
-    let message = parsed.map_value("message")?.str_value()?;
+    let severity = parsed
+        .map_value("severity")
+        .and_then(|x| x.str_value())
+        .or_else(|_| {
+            parsed
+                .map_value("level")
+                .and_then(|level| level.int_value())
+                .and_then(|level| Ok(bunyan_to_level(level as i32).to_string()))
+        })
+        .unwrap_or_else(|_| "unknown".to_string());
+
+    let message = parsed
+        .map_value("message")
+        .and_then(|x| x.str_value())
+        .or_else(|_| parsed.map_value("msg").and_then(|x| x.str_value()))?;
     let message = if let Ok(exception_message) = parsed.map_value("exc_info") {
         format!("{}\n{}", message, exception_message.str_value()?)
     } else {
