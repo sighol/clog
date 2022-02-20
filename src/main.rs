@@ -48,7 +48,6 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
     let time_json = parsed
         .map_value("timestamp")
         .or_else(|_| parsed.map_value("time"))?;
-    println!("{:?}", time_json);
 
     let time: DateTime<Utc> = if let Ok(time_str) = time_json.str_value() {
         Utc.datetime_from_str(&time_str, "%+")?
@@ -250,18 +249,21 @@ mod test {
         let lines: Vec<String> = input
             .split('\n')
             .into_iter()
-            .map(|it| it.to_owned())
+            .map(|it| it.to_owned() + "\n")
             .collect();
         let mut parser = Parser::new();
+
+        // Add all but the last line. It is only after the list line that the
+        // log statement is complete.
         for i in 0..lines.len() - 1 {
             let response = parser.add(&lines[i]);
-            assert_eq!(response[0].to_string(), "".to_string());
+            assert_eq!(0, response.len());
         }
 
-        let expected = "2020-11-13 14:18:27.234 UTC [INFO] Responding at http://0.0.0.0:8080";
+        // Add list line, which will complete the log message.
         let last = parser.add(&lines[lines.len() - 1]);
+        let expected = "2020-11-13 15:18:27.234 +01:00 [INFO] Responding at http://0.0.0.0:8080";
         assert_eq!(expected.to_string(), last[0].to_string());
-        // assert_eq!(ParserOutput::Line(expected.to_string()), last);
     }
 
     #[test]

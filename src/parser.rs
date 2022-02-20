@@ -132,11 +132,7 @@ fn unicode_letter<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ch
 #[cfg(test)]
 mod test {
     use nom::error::ErrorKind;
-    use proptest::{
-        collection::{hash_map, vec},
-        num,
-        prelude::*,
-    };
+    use proptest::{collection::hash_map, num, prelude::*};
     use proptest_recurse::{StrategyExt, StrategySet};
     use serde_json::{Number, Value};
 
@@ -181,19 +177,15 @@ mod test {
     fn arb_json(set: &mut StrategySet) -> SBoxedStrategy<Value> {
         // Serde can create valid JSON in any shape, so rather than using regexs
         // to recreate JSON from first principles, we use serde::json::Value.
+        //
+        // However, we don't support nested objects, or boolean values.
         prop_oneof![
             Just(Value::Null),
-            any::<bool>().prop_map(Value::Bool),
             any::<i64>().prop_map(|i| Value::Number(Number::from(i))),
             num::f64::NORMAL.prop_map(|f| Value::Number(Number::from_f64(f).unwrap())),
             "\\PC*".prop_map(Value::String)
         ]
-        .prop_mutually_recursive(2, 4, 4, set, |set| {
-            vec(set.get::<Value, _>(arb_json), 0..2)
-                .prop_map(Value::Array)
-                .sboxed()
-        })
-        .prop_mutually_recursive(2, 4, 4, set, arb_json_object)
+        .prop_mutually_recursive(0, 4, 4, set, arb_json_object)
     }
 
     fn arb_json_object(set: &mut StrategySet) -> SBoxedStrategy<Value> {
