@@ -5,11 +5,11 @@ use color_eyre::Result;
 use eyre::eyre;
 use nom::{
     branch::alt,
-    bytes::streaming::take_while,
+    bytes::streaming::{tag, take_while, take_while_m_n},
     character::streaming::{char, none_of, one_of},
     combinator::{cut, map},
     error::ParseError,
-    multi::separated_list0,
+    multi::{many0, separated_list0},
     number::streaming::double,
     sequence::{preceded, separated_pair, terminated},
     IResult,
@@ -18,6 +18,7 @@ use nom::{
 #[derive(Debug, PartialEq)]
 pub enum JsonValue {
     Str(String),
+    Null,
     Num(f64),
     Object(HashMap<String, JsonValue>),
 }
@@ -55,6 +56,10 @@ fn space<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E>
     take_while(move |c| chars.contains(c))(i)
 }
 
+fn null<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, JsonValue, E> {
+    tag("null")(i).and_then(|(i, _o)| Ok((i, JsonValue::Null)))
+}
+
 fn key_value<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, (String, JsonValue), E> {
     separated_pair(
         preceded(space, string),
@@ -83,6 +88,7 @@ fn json_value<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, JsonVa
             map(hash, JsonValue::Object),
             map(string, JsonValue::Str),
             map(double, JsonValue::Num),
+            null,
         )),
     )(i)
 }
@@ -96,9 +102,6 @@ fn string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, String, E>
 }
 
 fn parse_str<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, String, E> {
-    use nom::bytes::streaming::tag;
-    use nom::multi::many0;
-
     let any_string_char = none_of("\"");
     let escaped = preceded(tag("\\"), |i| match one_of("nt\"\\")(i) {
         Ok((rest, c)) => {
@@ -119,8 +122,6 @@ fn parse_str<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, String,
 }
 
 fn unicode_letter<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, char, E> {
-    use nom::bytes::streaming::{tag, take_while_m_n};
-
     let four_digits = |x: &'a str| take_while_m_n(4, 4, |c: char| c.is_digit(16))(x);
     let (rest, digits) = preceded(tag("\\u"), four_digits)(i)?;
     let num = u32::from_str_radix(digits, 16).expect("Couldn't parse str radix");

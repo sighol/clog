@@ -268,7 +268,7 @@ mod test {
     fn respond_to_text_input() {
         let mut parser = Parser::new();
         assert_eq!(
-            ParserOutput::Text("Hello world\n".to_string()).to_string(),
+            ParserOutput::Text("Hello world".to_string()).to_string(),
             parser.add("Hello world")[0].to_string()
         );
     }
