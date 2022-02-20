@@ -35,12 +35,12 @@ impl std::fmt::Display for LogLine {
 
 fn bunyan_to_level(level: i32) -> &'static str {
     match level {
-        50 => "error",
-        40 => "warn",
-        30 => "info",
-        20 => "debug",
-        10 => "tracing",
-        _ => "unknown",
+        50 => "ERROR",
+        40 => "WARN",
+        30 => "INFO",
+        20 => "DEBUG",
+        10 => "TRACING",
+        _ => "UNKNOWN",
     }
 }
 
@@ -264,6 +264,29 @@ mod test {
         let last = parser.add(&lines[lines.len() - 1]);
         let expected = "2020-11-13 15:18:27.234 +01:00 [INFO] Responding at http://0.0.0.0:8080";
         assert_eq!(expected.to_string(), last[0].to_string());
+    }
+
+    #[test]
+    fn buyan_input() {
+        let input = r#"{
+            "v": 0,
+            "name": "tracing_demo",
+            "msg": "Orphan event without a parent span",
+            "level": 30,
+            "hostname": "sighol-desktop",
+            "pid": 293764,
+            "time": "2022-02-20T18:05:16.272997204Z",
+            "target": "docktail",
+            "line": 97,
+            "file": "src/main.rs"
+          }"#;
+        let mut parser = Parser::new();
+        let output = parser.add(input);
+        let output = output[0].to_string();
+        assert_eq!(
+            output,
+            "2022-02-20 19:05:16.272997204 +01:00 [INFO] Orphan event without a parent span"
+        );
     }
 
     #[test]
