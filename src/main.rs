@@ -193,8 +193,9 @@ fn print(answer: &ParserOutput, t: &mut Terminal) {
         ParserOutput::Log(l) => {
             let tz = Local::now().timezone();
             let local_time = l.time.with_timezone(&tz);
+            let local_time_format = local_time.format("%Y-%m-%d %H:%M:%S%.3f");
             t.fg(term::color::GREEN).unwrap();
-            print!("{}", local_time);
+            print!("{}", local_time_format);
             if let Some(request_id) = l.context.get("requestId") {
                 t.reset().unwrap();
                 // t.fg(term::color::BRIGHT_BLACK).unwrap();
