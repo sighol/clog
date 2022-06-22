@@ -12,9 +12,18 @@ use chrono::Duration;
 use chrono::Local;
 use chrono::Utc;
 use color_eyre::Result;
+use colored::*;
 use nom::error::ErrorKind;
 
+use lazy_static::lazy_static;
+
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use parser::{root, JsonValue};
+
+lazy_static! {
+    static ref USE_LOCAL_TIMEZONE: AtomicBool = AtomicBool::new(true);
+}
 
 #[derive(Debug, Clone)]
 struct LogLine {
@@ -26,10 +35,47 @@ struct LogLine {
 
 impl std::fmt::Display for LogLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let tz = Local::now().timezone();
-        let local_time = self.time.with_timezone(&tz);
+        let is_local = USE_LOCAL_TIMEZONE.load(Ordering::Relaxed);
+        let tz = if is_local {
+            Local::now().offset().fix()
+        } else {
+            Utc.fix()
+        };
 
-        write!(f, "{} [{}] {}", local_time, self.severity, self.message,)
+        let time_in_timezone = self.time.with_timezone(&tz);
+        let time_in_timezone = time_in_timezone.format("%Y-%m-%d %H:%M:%S%.3f");
+        write!(f, "{}", time_in_timezone.to_string().green())?;
+        if !is_local {
+            write!(f, "{}", "Z".green())?;
+        }
+        if let Some(process_id) = self.context.get("processId") {
+            let max_len = std::cmp::min(process_id.len(), 6);
+            let process_id = process_id[..max_len].to_string();
+            write!(f, " [p={:6}]", process_id.bold())?;
+        } else if let Some(request_id) = self.context.get("requestId") {
+            let max_len = std::cmp::min(request_id.len(), 8);
+            let request_id = request_id[..max_len].to_string();
+            write!(f, " [{:<8}]", request_id)?;
+        }
+        write!(
+            f,
+            " {:7}",
+            self.severity.to_uppercase().bold().bright_black()
+        )?;
+        let severity = self.severity.to_lowercase();
+        let severity_color = if severity.contains("warn") {
+            "yellow"
+        } else if severity.contains("error") {
+            "red"
+        } else if severity.contains("debug") {
+            "bright_black"
+        } else if severity.contains("fatal") {
+            "magenta"
+        } else {
+            "clear"
+        };
+
+        writeln!(f, " {}", self.message.color(severity_color))
     }
 }
 
@@ -170,7 +216,6 @@ impl Parser {
 
 fn main() {
     use std::io::{self, prelude::*};
-    let mut t = term::stdout().expect("Could not unwrap stdout()");
 
     let mut parser = Parser::new();
     for line in io::stdin().lock().lines() {
@@ -178,74 +223,24 @@ fn main() {
         unwrapped.push('\n');
         let answers = parser.add(&unwrapped);
         for answer in answers {
-            print(&answer, &mut t);
+            print!("{}", &answer);
         }
     }
-    print(&parser.flush(), &mut t);
-}
-
-type Terminal = Box<dyn term::Terminal<Output = std::io::Stdout> + std::marker::Send>;
-
-fn print(answer: &ParserOutput, t: &mut Terminal) {
-    match answer {
-        ParserOutput::None => (),
-        ParserOutput::Text(s) => print!("{}", s),
-        ParserOutput::Log(l) => {
-            let tz = Local::now().timezone();
-            let local_time = l.time.with_timezone(&tz);
-            let local_time_format = local_time.format("%Y-%m-%d %H:%M:%S%.3f");
-            t.fg(term::color::GREEN).unwrap();
-            print!("{}", local_time_format);
-            if let Some(process_id) = l.context.get("processId") {
-                t.reset().unwrap();
-                let max_len = std::cmp::min(process_id.len(), 8);
-                let process_id = process_id[..max_len].to_string();
-                t.attr(term::Attr::Bold).unwrap();
-                print!(" [pid={}]", process_id);
-                t.reset().unwrap();
-            } else if let Some(request_id) = l.context.get("requestId") {
-                t.reset().unwrap();
-                // t.fg(term::color::BRIGHT_BLACK).unwrap();
-                let max_len = std::cmp::min(request_id.len(), 8);
-                let request_id = request_id[..max_len].to_string();
-                t.attr(term::Attr::Bold).unwrap();
-                print!(" [{}]", request_id);
-                t.reset().unwrap();
-            }
-            t.reset().unwrap();
-            t.fg(term::color::BRIGHT_BLACK).unwrap();
-            t.attr(term::Attr::Bold).unwrap();
-            print!(" {:7}", l.severity.to_uppercase());
-            t.reset().unwrap();
-            let severity = l.severity.to_lowercase();
-            if severity.contains("warn") {
-                t.fg(term::color::YELLOW).unwrap();
-            }
-            if severity.contains("error") {
-                t.fg(term::color::RED).unwrap();
-            }
-            if severity.contains("info") {
-                // t.fg(term::color::GREEN).unwrap();
-            }
-            if severity.contains("debug") {
-                t.fg(term::color::BRIGHT_BLACK).unwrap();
-            }
-            if severity.contains("fatal") {
-                t.fg(term::color::MAGENTA).unwrap();
-            }
-
-            print!(" {}", l.message);
-            t.reset().unwrap();
-            println!();
-        }
-    }
+    print!("{}", &parser.flush());
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+
+    fn before() {
+        colored::control::set_override(false);
+        USE_LOCAL_TIMEZONE.store(false, Ordering::Relaxed);
+    }
+
     #[test]
     fn respond_to_json_input() {
+        before();
         let input = r#"{
             "timestamp": {
               "seconds": 1605277107,
@@ -270,13 +265,46 @@ mod test {
         }
 
         // Add list line, which will complete the log message.
-        let last = parser.add(&lines[lines.len() - 1]);
-        let expected = "2020-11-13 15:18:27.234 +01:00 [INFO] Responding at http://0.0.0.0:8080";
-        assert_eq!(expected.to_string(), last[0].to_string());
+        let output = parser.add(&lines[lines.len() - 1]);
+        let expected = "2020-11-13 14:18:27.234Z INFO    Responding at http://0.0.0.0:8080\n";
+        assert_eq!(expected.to_string(), output[0].to_string());
+    }
+
+    #[test]
+    fn json_input_with_context() {
+        before();
+        let input = r#"{
+            "message": "[1167/9733 11% ETA=2022-04-01 20:50:06.868555] Ingesting 389 wells. 693.10 items/sec.",
+            "timestamp": "2022-04-01T18:49:54.068831Z",
+            "severity": "INFO",
+            "context": {
+              "requestId": "test",
+              "processId": "776f2d01-8bba-4c36-b6a8-5f7074c096d7"
+            }
+          }"#;
+        let lines: Vec<String> = input
+            .split('\n')
+            .into_iter()
+            .map(|it| it.to_owned() + "\n")
+            .collect();
+        let mut parser = Parser::new();
+
+        // Add all but the last line. It is only after the list line that the
+        // log statement is complete.
+        for i in 0..lines.len() - 1 {
+            let response = parser.add(&lines[i]);
+            assert_eq!(0, response.len());
+        }
+        let output = parser.add(&lines[lines.len() - 1])[0].to_string();
+        assert_eq!(
+            output,
+            "2022-04-01 18:49:54.068Z [p=776f2d] INFO    [1167/9733 11% ETA=2022-04-01 20:50:06.868555] Ingesting 389 wells. 693.10 items/sec.\n"
+        );
     }
 
     #[test]
     fn buyan_input() {
+        before();
         let input = r#"{
             "v": 0,
             "name": "tracing_demo",
@@ -292,14 +320,16 @@ mod test {
         let mut parser = Parser::new();
         let output = parser.add(input);
         let output = output[0].to_string();
+
         assert_eq!(
             output,
-            "2022-02-20 19:05:16.272997204 +01:00 [INFO] Orphan event without a parent span"
+            "2022-02-20 18:05:16.272Z INFO    Orphan event without a parent span\n"
         );
     }
 
     #[test]
     fn respond_to_text_input() {
+        before();
         let mut parser = Parser::new();
         assert_eq!(
             ParserOutput::Text("Hello world".to_string()).to_string(),
