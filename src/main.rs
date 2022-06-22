@@ -196,10 +196,18 @@ fn print(answer: &ParserOutput, t: &mut Terminal) {
             let local_time_format = local_time.format("%Y-%m-%d %H:%M:%S%.3f");
             t.fg(term::color::GREEN).unwrap();
             print!("{}", local_time_format);
-            if let Some(request_id) = l.context.get("requestId") {
+            if let Some(process_id) = l.context.get("processId") {
+                t.reset().unwrap();
+                let max_len = std::cmp::min(process_id.len(), 8);
+                let process_id = process_id[..max_len].to_string();
+                t.attr(term::Attr::Bold).unwrap();
+                print!(" [pid={}]", process_id);
+                t.reset().unwrap();
+            } else if let Some(request_id) = l.context.get("requestId") {
                 t.reset().unwrap();
                 // t.fg(term::color::BRIGHT_BLACK).unwrap();
-                let request_id = request_id[..8].to_string();
+                let max_len = std::cmp::min(request_id.len(), 8);
+                let request_id = request_id[..max_len].to_string();
                 t.attr(term::Attr::Bold).unwrap();
                 print!(" [{}]", request_id);
                 t.reset().unwrap();
