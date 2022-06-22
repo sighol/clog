@@ -57,25 +57,24 @@ impl std::fmt::Display for LogLine {
             let request_id = request_id[..max_len].to_string();
             write!(f, " [{:<8}]", request_id)?;
         }
+        let severity = self.severity.to_lowercase();
+        let (severity_color, message_color) = if severity.contains("warn") {
+            ("yellow", "yellow")
+        } else if severity.contains("error") {
+            ("red", "red")
+        } else if severity.contains("debug") {
+            ("bright black", "bright black")
+        } else if severity.contains("fatal") {
+            ("magenta", "magenta")
+        } else {
+            ("bright black", "lbaft")
+        };
         write!(
             f,
             " {:7}",
-            self.severity.to_uppercase().bold().bright_black()
+            self.severity.to_uppercase().bold().color(severity_color)
         )?;
-        let severity = self.severity.to_lowercase();
-        let severity_color = if severity.contains("warn") {
-            "yellow"
-        } else if severity.contains("error") {
-            "red"
-        } else if severity.contains("debug") {
-            "bright_black"
-        } else if severity.contains("fatal") {
-            "magenta"
-        } else {
-            "clear"
-        };
-
-        writeln!(f, " {}", self.message.color(severity_color))
+        writeln!(f, " {}", self.message.color(message_color))
     }
 }
 

@@ -6,6 +6,7 @@
   "severity": "INFO",
   "message": "Starting"
 }
+{  "timestamp": {    "seconds": 1605277107,    "nanos": 234000000  },  "severity": "WARNING",  "message": "this is a\n\tmultiline\n\twarning!!" }
 {
   "timestamp": {
     "seconds": 1605277104,
@@ -13,7 +14,7 @@
   },
   "severity": "warning",
   "message": "Log stats: Total count \u003d 1",
-  "context": {}
+  "context": {"requestId": "43718cd9-fe1b-43f4-97a6-d1db440fae4c"}
 }
   Noe random i midten her
     tnst
@@ -46,5 +47,7 @@ bla bla
   "message": "Testing\n\tone\n\ttwo",
   "context": {}
 }
-{  "timestamp": {    "seconds": 1605277107,    "nanos": 234000000  },  "severity": "debug",  "message": "1" }
-{  "timestamp": {    "seconds": 1605277107,    "nanos": 234000000  },  "severity": "debug",  "message": "2" }
+{  "timestamp": {    "seconds": 1605277107,    "nanos": 234000000  },  "severity": "fatal",  "message": "1" }
+{  "timestamp": {    "seconds": 1605277107,    "nanos": 234000000  },  "severity": "error",  "message": "2" }
+{  "timestamp": {    "seconds": 1605277107,    "nanos": 234000000  },  "severity": "debug",  "message": "pid 3", "context": {"processId": "bbc225f8-9f1c-451e-aef1-a6eda12d898e"}}
+{  "timestamp": {    "seconds": 1605277107,    "nanos": 234000000  },  "severity": "info",  "message": "pid 5", "context": {"processId": "535ada24-d5d1-463b-a1b3-20aef00d7fb3"}}
