@@ -21,6 +21,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use parser::{root, JsonValue};
 
+use clap::Parser as ClapParser;
+use clap::ValueEnum as ClapValueEnum;
+
 lazy_static! {
     static ref USE_LOCAL_TIMEZONE: AtomicBool = AtomicBool::new(true);
 }
@@ -213,8 +216,32 @@ impl Parser {
     }
 }
 
+#[derive(ClapParser)]
+struct Cli {
+    #[arg(value_enum, long="color", default_value_t=ColorChoice::Auto)]
+    color: ColorChoice,
+}
+
+#[derive(ClapValueEnum, Clone, Debug)]
+enum ColorChoice {
+    Auto,
+    Never,
+    Always,
+}
+
 fn main() {
     use std::io::{self, prelude::*};
+
+    let args: Cli = Cli::parse();
+    match args.color {
+        ColorChoice::Always => {
+            colored::control::set_override(true);
+        }
+        ColorChoice::Never => {
+            colored::control::set_override(false);
+        }
+        _ => {}
+    };
 
     let mut parser = Parser::new();
     for line in io::stdin().lock().lines() {

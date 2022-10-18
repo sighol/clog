@@ -2,9 +2,11 @@
 authors = ["Sigurd Holsen <sigurd.holsen@cognite.com>"]
 edition = "2018"
 name = "clog"
-version = "0.5.2"
+version = "0.5.3"
+
 [dependencies]
 chrono = "0.4.19"
+clap = { version = "4.0.13", features = ["derive"] }
 color-eyre = "0.5.11"
 colored = "2.0.0"
 eyre = "0.6.5"
