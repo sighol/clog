@@ -116,7 +116,7 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
     } else {
         let seconds_value = time_json.map_value("seconds")?.int_value()?;
         let nanos_value = time_json.map_value("nanos")?.int_value()?;
-        let start = Utc.ymd(1970, 1, 1).and_hms(0, 0, 0);
+        let start = Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap();
         let duration =
             Duration::seconds(seconds_value as i64) + Duration::nanoseconds(nanos_value as i64);
         start + duration
