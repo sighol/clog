@@ -191,7 +191,6 @@ dependencies = [
  "color-eyre",
  "colored",
  "eyre",
- "lazy_static",
  "nom",
  "proptest",
  "proptest-recurse",

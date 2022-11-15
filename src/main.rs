@@ -2,7 +2,7 @@
 mod parser;
 
 use std::collections::HashMap;
-use std::fmt::Display;
+use std::io::Write;
 use std::mem::take;
 use std::str;
 
@@ -15,22 +15,10 @@ use color_eyre::Result;
 use colored::*;
 use nom::error::ErrorKind;
 
-use lazy_static::lazy_static;
-
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-
 use parser::{root, JsonValue};
 
 use clap::Parser as ClapParser;
 use clap::ValueEnum as ClapValueEnum;
-
-lazy_static! {
-    static ref USE_LOCAL_TIMEZONE: AtomicBool = AtomicBool::new(true);
-    static ref INCLUDE_SDK: AtomicBool = AtomicBool::new(false);
-    static ref INCLUDE_CLIENT_NAME: AtomicBool = AtomicBool::new(false);
-    static ref EXTRA: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
-}
 
 #[derive(Debug, Clone)]
 struct LogLine {
@@ -40,19 +28,32 @@ struct LogLine {
     pub context: HashMap<String, String>,
 }
 
-impl std::fmt::Display for LogLine {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let is_local = USE_LOCAL_TIMEZONE.load(Ordering::Relaxed);
-        let tz = if is_local {
+struct PrintConfig {
+    pub extra: Vec<String>,
+    pub is_local_timezone: bool,
+}
+
+impl PrintConfig {
+    fn tz(&self) -> FixedOffset {
+        if self.is_local_timezone {
             Local::now().offset().fix()
         } else {
             Utc.fix()
-        };
+        }
+    }
+}
+
+impl LogLine {
+    fn print<W>(&self, f: &mut W, config: &PrintConfig) -> std::io::Result<()>
+    where
+        W: Write,
+    {
+        let tz = config.tz();
 
         let time_in_timezone = self.time.with_timezone(&tz);
         let time_in_timezone = time_in_timezone.format("%Y-%m-%d %H:%M:%S%.3f");
         write!(f, "{}", time_in_timezone.to_string().green())?;
-        if !is_local {
+        if !config.is_local_timezone {
             write!(f, "{}", "Z".green())?;
         }
         if let Some(process_id) = self.context.get("processId") {
@@ -65,13 +66,11 @@ impl std::fmt::Display for LogLine {
             write!(f, " [{:<8}]", request_id)?;
         }
 
-        {
-            for e in EXTRA.lock().unwrap().iter() {
-                if let Some(app) = self.context.get(e) {
-                    write!(f, " [{}]", app)?;
-                } else {
-                    write!(f, " []")?;
-                }
+        for e in config.extra.iter() {
+            if let Some(app) = self.context.get(e) {
+                write!(f, " [{}]", app)?;
+            } else {
+                write!(f, " []")?;
             }
         }
 
@@ -170,12 +169,15 @@ enum ParserOutput {
     Log(LogLine),
 }
 
-impl Display for ParserOutput {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl ParserOutput {
+    fn print<W>(&self, f: &mut W, config: &PrintConfig) -> std::io::Result<()>
+    where
+        W: Write,
+    {
         match &self {
-            ParserOutput::Log(l) => write!(f, "{}", l),
-            ParserOutput::None => Ok(()),
+            ParserOutput::Log(l) => l.print(f, config),
             ParserOutput::Text(s) => write!(f, "{}", s),
+            ParserOutput::None => Ok(()),
         }
     }
 }
@@ -247,7 +249,7 @@ enum ColorChoice {
     Always,
 }
 
-fn main() {
+fn main() -> eyre::Result<()> {
     use std::io::{self, prelude::*};
 
     let args: Cli = Cli::parse();
@@ -261,29 +263,46 @@ fn main() {
         _ => {}
     };
 
-    for e in args.extra {
-        EXTRA.lock().unwrap().push(e);
-    }
+    let print_config = PrintConfig {
+        extra: args.extra,
+        is_local_timezone: true,
+    };
 
     let mut parser = Parser::new();
     for line in io::stdin().lock().lines() {
         let mut unwrapped = line.unwrap().to_string();
         unwrapped.push('\n');
         let answers = parser.add(&unwrapped);
+        let mut stdout = io::stdout().lock();
         for answer in answers {
-            print!("{}", &answer);
+            // answer.fmt(stdout);
+            answer.print(&mut stdout, &print_config)?;
         }
     }
-    print!("{}", &parser.flush());
+    let mut stdout = io::stdout().lock();
+    parser.flush().print(&mut stdout, &print_config)?;
+
+    Ok(())
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
 
+    impl ParserOutput {
+        fn to_string(&self) -> String {
+            let config = PrintConfig {
+                extra: vec![],
+                is_local_timezone: false,
+            };
+            let mut s = Vec::<u8>::new();
+            self.print(&mut s, &config).expect("Fail to write");
+            String::from_utf8(s).expect("Couldn't convert to string")
+        }
+    }
+
     fn before() {
         colored::control::set_override(false);
-        USE_LOCAL_TIMEZONE.store(false, Ordering::Relaxed);
     }
 
     #[test]

@@ -45,7 +45,9 @@ bla bla
   },
   "severity": "debug",
   "message": "Testing\n\tone\n\ttwo",
-  "context": {}
+  "context": {
+    "what": "check"
+  }
 }
 {  "timestamp": {    "seconds": 1605277107,    "nanos": 234000000  },  "severity": "fatal",  "message": "1" }
 {  "timestamp": {    "seconds": 1605277107,    "nanos": 234000000  },  "severity": "error",  "message": "2" }
