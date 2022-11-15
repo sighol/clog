@@ -254,12 +254,8 @@ fn main() -> eyre::Result<()> {
 
     let args: Cli = Cli::parse();
     match args.color {
-        ColorChoice::Always => {
-            colored::control::set_override(true);
-        }
-        ColorChoice::Never => {
-            colored::control::set_override(false);
-        }
+        ColorChoice::Always => colored::control::set_override(true),
+        ColorChoice::Never => colored::control::set_override(false),
         _ => {}
     };
 
@@ -273,10 +269,9 @@ fn main() -> eyre::Result<()> {
     for line in io::stdin().lock().lines() {
         let mut unwrapped = line.unwrap().to_string();
         unwrapped.push('\n');
-        let answers = parser.add(&unwrapped);
-        for answer in answers {
-            // answer.fmt(stdout);
-            answer.print(&mut stdout, &print_config)?;
+        let outputs = parser.add(&unwrapped);
+        for output in outputs {
+            output.print(&mut stdout, &print_config)?;
         }
     }
     parser.flush().print(&mut stdout, &print_config)?;
