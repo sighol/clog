@@ -18,6 +18,7 @@ use nom::error::ErrorKind;
 use lazy_static::lazy_static;
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use parser::{root, JsonValue};
 
@@ -26,6 +27,9 @@ use clap::ValueEnum as ClapValueEnum;
 
 lazy_static! {
     static ref USE_LOCAL_TIMEZONE: AtomicBool = AtomicBool::new(true);
+    static ref INCLUDE_SDK: AtomicBool = AtomicBool::new(false);
+    static ref INCLUDE_CLIENT_NAME: AtomicBool = AtomicBool::new(false);
+    static ref EXTRA: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
 }
 
 #[derive(Debug, Clone)]
@@ -60,6 +64,17 @@ impl std::fmt::Display for LogLine {
             let request_id = request_id[..max_len].to_string();
             write!(f, " [{:<8}]", request_id)?;
         }
+
+        {
+            for e in EXTRA.lock().unwrap().iter() {
+                if let Some(app) = self.context.get(e) {
+                    write!(f, " [{}]", app)?;
+                } else {
+                    write!(f, " []")?;
+                }
+            }
+        }
+
         let severity = self.severity.to_lowercase();
         let (severity_color, message_color) = if severity.contains("warn") {
             ("yellow", "yellow")
@@ -220,6 +235,9 @@ impl Parser {
 struct Cli {
     #[arg(value_enum, long="color", default_value_t=ColorChoice::Auto)]
     color: ColorChoice,
+
+    #[arg(short, long)]
+    extra: Vec<String>,
 }
 
 #[derive(ClapValueEnum, Clone, Debug)]
@@ -242,6 +260,10 @@ fn main() {
         }
         _ => {}
     };
+
+    for e in args.extra {
+        EXTRA.lock().unwrap().push(e);
+    }
 
     let mut parser = Parser::new();
     for line in io::stdin().lock().lines() {
