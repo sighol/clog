@@ -269,17 +269,16 @@ fn main() -> eyre::Result<()> {
     };
 
     let mut parser = Parser::new();
+    let mut stdout = io::stdout().lock();
     for line in io::stdin().lock().lines() {
         let mut unwrapped = line.unwrap().to_string();
         unwrapped.push('\n');
         let answers = parser.add(&unwrapped);
-        let mut stdout = io::stdout().lock();
         for answer in answers {
             // answer.fmt(stdout);
             answer.print(&mut stdout, &print_config)?;
         }
     }
-    let mut stdout = io::stdout().lock();
     parser.flush().print(&mut stdout, &print_config)?;
 
     Ok(())
