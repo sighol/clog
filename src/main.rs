@@ -11,8 +11,8 @@ use chrono::DateTime;
 use chrono::Duration;
 use chrono::Local;
 use chrono::Utc;
+use color_eyre::owo_colors::{OwoColorize, Style};
 use color_eyre::Result;
-use colored::*;
 use nom::error::ErrorKind;
 
 use parser::{root, JsonValue};
@@ -65,32 +65,38 @@ impl LogLine {
             write!(f, " [{:<8}]", request_id)?;
         }
 
-        for e in config.extra.iter() {
+        let extra_styles = vec![
+            Style::new().bright_yellow(),
+            Style::new().bright_cyan(),
+            Style::new().bright_magenta(),
+        ];
+        for (i, e) in config.extra.iter().enumerate() {
+            let style = extra_styles[i % extra_styles.len()];
             if let Some(app) = self.context.get(e) {
-                write!(f, " [{}]", app)?;
+                write!(f, " [{}]", app.style(style))?;
             } else {
                 write!(f, " []")?;
             }
         }
 
         let severity = self.severity.to_lowercase();
-        let (severity_color, message_color) = if severity.contains("warn") {
-            ("yellow", "yellow")
+        let (severity_style, message_style) = if severity.contains("warn") {
+            (Style::new().yellow(), Style::new().yellow())
         } else if severity.contains("error") {
-            ("red", "red")
+            (Style::new().red(), Style::new().red())
         } else if severity.contains("debug") {
-            ("bright black", "bright black")
+            (Style::new().bright_black(), Style::new().bright_black())
         } else if severity.contains("fatal") {
-            ("magenta", "magenta")
+            (Style::new().magenta(), Style::new().magenta())
         } else {
-            ("bright black", "lbaft")
+            (Style::new().bright_black(), Style::new())
         };
         write!(
             f,
             " {:7}",
-            self.severity.to_uppercase().bold().color(severity_color)
+            self.severity.to_uppercase().bold().style(severity_style)
         )?;
-        writeln!(f, " {}", self.message.color(message_color))
+        writeln!(f, " {}", self.message.style(message_style))
     }
 }
 
@@ -237,7 +243,7 @@ struct Cli {
     #[arg(value_enum, long="color", default_value_t=ColorChoice::Auto)]
     color: ColorChoice,
 
-    #[arg(short, long)]
+    #[arg(short, long, help = "Extra values to print. Eg. X-CDP-SDK")]
     extra: Vec<String>,
 }
 
