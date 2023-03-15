@@ -13,6 +13,7 @@ use chrono::Local;
 use chrono::Utc;
 use color_eyre::owo_colors::{OwoColorize, Style};
 use color_eyre::Result;
+use eyre::Context;
 use nom::error::ErrorKind;
 
 use parser::{root, JsonValue};
@@ -114,10 +115,12 @@ fn bunyan_to_level(level: i32) -> &'static str {
 fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
     let time_json = parsed
         .map_value("timestamp")
-        .or_else(|_| parsed.map_value("time"))?;
+        .or_else(|_| parsed.map_value("time"))
+        .or_else(|_| parsed.map_value("eventTime"))?;
 
     let time: DateTime<Utc> = if let Ok(time_str) = time_json.str_value() {
-        Utc.datetime_from_str(&time_str, "%+")?
+        Utc.datetime_from_str(&time_str, "%+")
+            .context(format!("Failed to parse datetime: `{}`", &time_str))?
     } else {
         let seconds_value = time_json.map_value("seconds")?.int_value()?;
         let nanos_value = time_json.map_value("nanos")?.int_value()?;
@@ -190,6 +193,7 @@ impl ParserOutput {
 #[derive(Default, Debug)]
 struct Parser {
     buffer: String,
+    pub debug: bool,
 }
 
 impl Parser {
@@ -215,7 +219,12 @@ impl Parser {
             Ok((rest, value)) => {
                 let output = match get_log_line(value) {
                     Ok(x) => ParserOutput::Log(x),
-                    Err(_) => ParserOutput::Text(self.buffer.clone()),
+                    Err(e) => {
+                        if self.debug {
+                            eprintln!("Failed to parse: {:?}", e)
+                        }
+                        ParserOutput::Text(self.buffer.clone())
+                    }
                 };
                 let rest = rest.trim_start_matches('\n').to_string();
                 self.buffer.clear();
@@ -246,6 +255,12 @@ struct Cli {
 
     #[arg(short, long, help = "Extra values to print. Eg. X-CDP-SDK")]
     extra: Vec<String>,
+
+    #[arg(
+        long,
+        help = "Turn on debug mode. All lines that can't be parsed will be output to stderr"
+    )]
+    debug: bool,
 }
 
 #[derive(ClapValueEnum, Clone, Debug)]
@@ -271,6 +286,8 @@ fn main() -> eyre::Result<()> {
     };
 
     let mut parser = Parser::new();
+    parser.debug = args.debug;
+
     let mut stdout = io::stdout().lock();
     for line in io::stdin().lock().lines() {
         let mut unwrapped = line.unwrap().to_string();

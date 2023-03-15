@@ -32,7 +32,7 @@ impl JsonValue {
 
         match map.get(key) {
             Some(value) => Ok(value),
-            None => Err(eyre!("Key not found")),
+            None => Err(eyre!("Key `{}` not found", key)),
         }
     }
 
