@@ -239,6 +239,7 @@ impl Parser {
 }
 
 #[derive(ClapParser)]
+#[command(version, author)]
 struct Cli {
     #[arg(value_enum, long="color", default_value_t=ColorChoice::Auto)]
     color: ColorChoice,
