@@ -48,14 +48,13 @@ impl LogLine {
     where
         W: Write,
     {
-        let tz = config.tz();
-
-        let time_in_timezone = self.time.with_timezone(&tz);
+        let time_in_timezone = self.time.with_timezone(&config.tz());
         let time_in_timezone = time_in_timezone.format("%Y-%m-%d %H:%M:%S%.3f");
         write!(f, "{}", time_in_timezone.to_string().green())?;
         if !config.is_local_timezone {
             write!(f, "{}", "Z".green())?;
         }
+        // process id or request_id
         if let Some(process_id) = self.context.get("processId") {
             let max_len = std::cmp::min(process_id.len(), 6);
             let process_id = process_id[..max_len].to_string();
