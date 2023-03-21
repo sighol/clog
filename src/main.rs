@@ -4,7 +4,6 @@ mod parser;
 use std::collections::HashMap;
 use std::io::Write;
 use std::mem::take;
-use std::str;
 
 use chrono::prelude::*;
 use chrono::DateTime;
@@ -295,6 +294,7 @@ fn main() -> eyre::Result<()> {
         let outputs = parser.add(&unwrapped);
         for output in outputs {
             output.print(&mut stdout, &print_config)?;
+            stdout.flush()?;
         }
     }
     parser.flush().print(&mut stdout, &print_config)?;
