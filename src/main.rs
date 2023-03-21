@@ -208,7 +208,7 @@ impl Parser {
         }
     }
 
-    fn add(&mut self, line: &str) -> Vec<ParserOutput> {
+    fn push(&mut self, line: &str) -> Vec<ParserOutput> {
         use nom::Err::{Error, Failure, Incomplete};
 
         self.buffer.push_str(line);
@@ -228,7 +228,7 @@ impl Parser {
                 let rest = rest.trim_start_matches('\n').to_string();
                 self.buffer.clear();
                 let mut output = vec![output];
-                for next_output in self.add(&rest) {
+                for next_output in self.push(&rest) {
                     match next_output {
                         ParserOutput::None => (),
                         _ => output.push(next_output),
@@ -291,7 +291,7 @@ fn main() -> eyre::Result<()> {
     for line in io::stdin().lock().lines() {
         let mut unwrapped = line.unwrap().to_string();
         unwrapped.push('\n');
-        let outputs = parser.add(&unwrapped);
+        let outputs = parser.push(&unwrapped);
         for output in outputs {
             output.print(&mut stdout, &print_config)?;
             stdout.flush()?;
@@ -344,12 +344,12 @@ mod test {
         // Add all but the last line. It is only after the list line that the
         // log statement is complete.
         for i in 0..lines.len() - 1 {
-            let response = parser.add(&lines[i]);
+            let response = parser.push(&lines[i]);
             assert_eq!(0, response.len());
         }
 
         // Add list line, which will complete the log message.
-        let output = parser.add(&lines[lines.len() - 1]);
+        let output = parser.push(&lines[lines.len() - 1]);
         let expected = "2020-11-13 14:18:27.234Z INFO    Responding at http://0.0.0.0:8080\n";
         assert_eq!(expected.to_string(), output[0].to_string());
     }
@@ -376,10 +376,10 @@ mod test {
         // Add all but the last line. It is only after the list line that the
         // log statement is complete.
         for i in 0..lines.len() - 1 {
-            let response = parser.add(&lines[i]);
+            let response = parser.push(&lines[i]);
             assert_eq!(0, response.len());
         }
-        let output = parser.add(&lines[lines.len() - 1])[0].to_string();
+        let output = parser.push(&lines[lines.len() - 1])[0].to_string();
         assert_eq!(
             output,
             "2022-04-01 18:49:54.068Z [p=776f2d] INFO    [1167/9733 11% ETA=2022-04-01 20:50:06.868555] Ingesting 389 wells. 693.10 items/sec.\n"
@@ -402,7 +402,7 @@ mod test {
             "file": "src/main.rs"
           }"#;
         let mut parser = Parser::new();
-        let output = parser.add(input);
+        let output = parser.push(input);
         let output = output[0].to_string();
 
         assert_eq!(
@@ -417,7 +417,7 @@ mod test {
         let mut parser = Parser::new();
         assert_eq!(
             ParserOutput::Text("Hello world".to_string()).to_string(),
-            parser.add("Hello world")[0].to_string()
+            parser.push("Hello world")[0].to_string()
         );
     }
 }

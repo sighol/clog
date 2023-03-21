@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use std::str;
 
-use color_eyre::Result;
-use eyre::eyre;
+use eyre::{eyre, Result};
 use nom::{
     branch::alt,
     bytes::streaming::{tag, take_while, take_while_m_n},
@@ -27,7 +26,7 @@ impl JsonValue {
     pub fn map_value(&self, key: &str) -> Result<&JsonValue> {
         let map = match self {
             JsonValue::Object(x) => x,
-            _ => return Err(eyre!("map_value on non-object")),
+            _ => return Err(eyre!("map_value with key '{key}' on non-object: {self:?}")),
         };
 
         match map.get(key) {
