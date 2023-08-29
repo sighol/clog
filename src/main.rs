@@ -115,7 +115,8 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
     let time_json = parsed
         .map_value("timestamp")
         .or_else(|_| parsed.map_value("time"))
-        .or_else(|_| parsed.map_value("eventTime"))?;
+        .or_else(|_| parsed.map_value("eventTime"))
+        .or_else(|_| parsed.map_value("Timestamp"))?;
 
     let time: DateTime<Utc> = if let Ok(time_str) = time_json.str_value() {
         Utc.datetime_from_str(&time_str, "%+")
@@ -142,8 +143,10 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
 
     let message = parsed
         .map_value("message")
-        .and_then(|x| x.str_value())
-        .or_else(|_| parsed.map_value("msg").and_then(|x| x.str_value()))?;
+        .or_else(|_| parsed.map_value("msg"))
+        .or_else(|_| parsed.map_value("MessageTemplate"))
+        .and_then(|x| x.str_value())?;
+
     let message = if let Ok(exception_message) = parsed.map_value("exc_info") {
         format!("{}\n{}", message, exception_message.str_value()?)
     } else {
