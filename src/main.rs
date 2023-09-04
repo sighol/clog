@@ -10,10 +10,11 @@ use chrono::DateTime;
 use chrono::Duration;
 use chrono::Local;
 use chrono::Utc;
-use color_eyre::owo_colors::{OwoColorize, Style};
 use color_eyre::Result;
 use eyre::Context;
 use nom::error::ErrorKind;
+use owo_colors::Stream;
+use owo_colors::{OwoColorize, Style};
 
 use parser::{root, JsonValue};
 
@@ -50,7 +51,13 @@ impl LogLine {
     {
         let time_in_timezone = self.time.with_timezone(&config.tz());
         let time_in_timezone = time_in_timezone.format("%Y-%m-%d %H:%M:%S%.3f");
-        write!(f, "{}", time_in_timezone.to_string().green())?;
+        write!(
+            f,
+            "{}",
+            time_in_timezone
+                .to_string()
+                .if_supports_color(Stream::Stdout, |t| t.green())
+        )?;
         if !config.is_local_timezone {
             write!(f, "{}", "Z".green())?;
         }
@@ -58,7 +65,11 @@ impl LogLine {
         if let Some(process_id) = self.context.get("processId") {
             let max_len = std::cmp::min(process_id.len(), 6);
             let process_id = process_id[..max_len].to_string();
-            write!(f, " [p={:6}]", process_id.bold())?;
+            write!(
+                f,
+                " [p={:6}]",
+                process_id.if_supports_color(Stream::Stdout, |t| t.bold())
+            )?;
         } else if let Some(request_id) = self.context.get("requestId") {
             let max_len = std::cmp::min(request_id.len(), 8);
             let request_id = request_id[..max_len].to_string();
@@ -73,7 +84,11 @@ impl LogLine {
         for (i, e) in config.extra.iter().enumerate() {
             let style = extra_styles[i % extra_styles.len()];
             if let Some(app) = self.context.get(e) {
-                write!(f, " [{}]", app.style(style))?;
+                write!(
+                    f,
+                    " [{}]",
+                    app.if_supports_color(Stream::Stdout, |t| t.style(style))
+                )?;
             } else {
                 write!(f, " []")?;
             }
@@ -94,9 +109,17 @@ impl LogLine {
         write!(
             f,
             " {:7}",
-            self.severity.to_uppercase().bold().style(severity_style)
+            self.severity
+                .to_uppercase()
+                .if_supports_color(Stream::Stdout, |text| text.style(severity_style))
+                .if_supports_color(Stream::Stdout, |text| text.bold())
         )?;
-        writeln!(f, " {}", self.message.style(message_style))
+        writeln!(
+            f,
+            " {}",
+            self.message
+                .if_supports_color(Stream::Stdout, |t| t.style(message_style))
+        )
     }
 }
 
@@ -277,8 +300,8 @@ fn main() -> eyre::Result<()> {
 
     let args: Cli = Cli::parse();
     match args.color {
-        ColorChoice::Always => colored::control::set_override(true),
-        ColorChoice::Never => colored::control::set_override(false),
+        ColorChoice::Always => owo_colors::set_override(true),
+        ColorChoice::Never => owo_colors::set_override(false),
         _ => {}
     };
 
@@ -322,7 +345,7 @@ mod test {
     }
 
     fn before() {
-        colored::control::set_override(false);
+        owo_colors::set_override(false);
     }
 
     #[test]

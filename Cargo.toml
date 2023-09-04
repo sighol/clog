@@ -5,12 +5,12 @@ name = "clog"
 version = "0.5.8"
 
 [dependencies]
-chrono = "0.4.19"
-clap = { version = "4.0.13", features = ["derive"] }
-color-eyre = "0.6.2"
-colored = "2.0.0"
-eyre = "0.6.5"
-nom = "7.1.1"
+chrono = "0.4"
+clap = { version = "4.4", features = ["derive"] }
+color-eyre = "0.6"
+owo-colors = { version = "3", features = ["supports-colors"] }
+eyre = "0.6"
+nom = "7.1"
 
 [dev-dependencies]
 proptest = "1.0.0"
