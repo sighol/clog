@@ -6,7 +6,7 @@ use nom::{
     branch::alt,
     bytes::streaming::{tag, take_while, take_while_m_n},
     character::streaming::{char, none_of, one_of},
-    combinator::{cut, map},
+    combinator::{cut, map, value},
     error::ParseError,
     multi::{many0, separated_list0},
     number::streaming::double,
@@ -14,11 +14,12 @@ use nom::{
     IResult,
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum JsonValue {
     Str(String),
     Null,
     Num(f64),
+    Bool(bool),
     Object(HashMap<String, JsonValue>),
 }
 
@@ -59,6 +60,13 @@ fn null<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, JsonValue, E
     tag("null")(i).and_then(|(i, _o)| Ok((i, JsonValue::Null)))
 }
 
+fn bool<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, JsonValue, E> {
+    let parse_true = value(JsonValue::Bool(true), tag("true"));
+    let parse_false = value(JsonValue::Bool(false), tag("false"));
+
+    alt((parse_true, parse_false))(input)
+}
+
 fn key_value<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, (String, JsonValue), E> {
     separated_pair(
         preceded(space, string),
@@ -87,6 +95,7 @@ fn json_value<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, JsonVa
             map(hash, JsonValue::Object),
             map(string, JsonValue::Str),
             map(double, JsonValue::Num),
+            bool,
             null,
         )),
     )(i)

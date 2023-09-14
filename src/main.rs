@@ -118,6 +118,7 @@ impl LogLine {
                     Some(JsonValue::Object(m)) => Some(format!("{:?}", m)),
                     Some(JsonValue::Num(n)) => Some(format!("{}", n)),
                     Some(JsonValue::Str(s)) => Some(format!("{}", s)),
+                    Some(JsonValue::Bool(b)) => Some(format!("{}", b)),
                     Some(JsonValue::Null) => None,
                     None => None,
                 };
@@ -143,13 +144,23 @@ where
     let mut sorted_keys: Vec<_> = map.keys().clone().into_iter().collect();
     sorted_keys.sort();
     for key in sorted_keys.into_iter() {
+        if key == "timestamp" || key == "@timestamp" {
+            continue;
+        }
         let value = match &map[key] {
             JsonValue::Null => None,
-            JsonValue::Num(s) => Some(s.to_string()),
-            JsonValue::Str(s) => Some(s.clone()),
+            JsonValue::Num(n) => Some(format!("{}", n)),
+            JsonValue::Str(s) => Some(format!("{}", s)),
+            JsonValue::Bool(b) => Some(format!("{}", b)),
             JsonValue::Object(map) => {
                 if map.len() == 0 {
-                    writeln!(f, "{}{}: {}", indent, key.bright_black(), "{}".italic().bright_black())?;
+                    writeln!(
+                        f,
+                        "{}{}: {}",
+                        indent,
+                        key.bright_black(),
+                        "{}".italic().bright_black()
+                    )?;
                 } else {
                     writeln!(f, "{}{}:", indent, key.bright_black())?;
                     write_logline_map(f, map, &format!("  {}", indent), message)?;
@@ -290,8 +301,9 @@ impl Parser {
                     Ok(x) => ParserOutput::Log(x),
                     Err(e) => {
                         if self.debug {
-                            eprintln!("Failed to parse: {:?}", e)
+                            eprintln!("Failed get_log_line: {:?}", e.red())
                         }
+                        println!("Self.debug: {}", self.debug);
                         ParserOutput::Text(self.buffer.clone())
                     }
                 };
@@ -308,6 +320,9 @@ impl Parser {
             }
             Err(Incomplete(_)) => vec![],
             Err(Failure(_)) | Err(Error(_)) => {
+                if self.debug {
+                    eprintln!("Parsing failure: {:?}", result.red());
+                }
                 let output = ParserOutput::Text(self.buffer.clone());
                 self.buffer.clear();
                 vec![output]
