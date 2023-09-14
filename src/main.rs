@@ -61,7 +61,7 @@ impl LogLine {
                 .if_supports_color(Stream::Stdout, |t| t.green())
         )?;
         if !config.is_local_timezone {
-            write!(f, "{}", "Z".green())?;
+            write!(f, "{}", "Z".if_supports_color(Stream::Stdout, |t| t.green()))?;
         }
         // process id or request_id
         if let Some(process_id) = self.value(&self.parsed_map, "context.processId") {
@@ -314,7 +314,6 @@ impl Parser {
                         if self.debug {
                             eprintln!("Failed get_log_line: {:?}", e.red())
                         }
-                        println!("Self.debug: {}", self.debug);
                         ParserOutput::Text(self.buffer.clone())
                     }
                 };
@@ -359,6 +358,9 @@ struct Cli {
 
     #[arg(short, long, help = "Show all additional info in a map")]
     verbose: bool,
+
+    #[arg(long, help="Output timestamps in UTC")]
+    utc: bool,
 }
 
 #[derive(ClapValueEnum, Clone, Debug)]
@@ -380,7 +382,7 @@ fn main() -> eyre::Result<()> {
 
     let print_config = PrintConfig {
         extra: args.extra,
-        is_local_timezone: true,
+        is_local_timezone: !args.utc,
         verbose: args.verbose,
     };
 
@@ -490,6 +492,7 @@ mod test {
     #[test]
     fn buyan_input() {
         before();
+        owo_colors::set_override(false);
         let input = r#"{
             "v": 0,
             "name": "tracing_demo",
