@@ -8,9 +8,9 @@ version = "0.6.0"
 chrono = "0.4"
 clap = { version = "4.4", features = ["derive"] }
 color-eyre = "0.6"
-owo-colors = { version = "3", features = ["supports-colors"] }
 eyre = "0.6"
 nom = "7.1"
+colored = "2.0.4"
 
 [dev-dependencies]
 proptest = "1.0.0"

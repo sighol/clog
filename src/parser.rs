@@ -7,11 +7,13 @@ use nom::{
     bytes::streaming::{tag, take_while, take_while_m_n},
     character::streaming::{char, none_of, one_of},
     combinator::{cut, map, value},
-    error::ParseError,
+    error::{ParseError, Error, ErrorKind},
     multi::{many0, separated_list0},
     number::streaming::double,
     sequence::{preceded, separated_pair, terminated},
     IResult,
+    Parser,
+    Err, Needed, Slice,
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -107,12 +109,12 @@ fn json_value<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, JsonVa
     preceded(
         space,
         alt((
+            null,
+            bool,
+            map(double, JsonValue::Num),
+            map(string, JsonValue::Str),
             map(hash, JsonValue::Object),
             map(array, JsonValue::Array),
-            map(string, JsonValue::Str),
-            map(double, JsonValue::Num),
-            bool,
-            null,
         )),
     )(i)
 }
@@ -122,35 +124,60 @@ pub fn root<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, JsonValu
 }
 
 fn string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, String, E> {
-    preceded(char('\"'), cut(terminated(parse_str, char('\"'))))(i)
+    preceded(char('\"'), cut(terminated(string_inner, char('\"'))))(i)
 }
 
-fn parse_str<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, String, E> {
-    let any_string_char = none_of("\"");
-    let escaped = preceded(tag("\\"), |i| match one_of("nt\"\\")(i) {
-        Ok((rest, c)) => {
-            let c = match c {
+fn  my_error<'a>(i: &'a str) -> IResult<&'a str, String> {
+    return Err(Err::Error(Error::from_error_kind(i, ErrorKind::Char)));
+}
+
+fn string_inner<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, String, E> {
+    let mut buffer = String::new();
+    let mut iterator = i.char_indices();
+
+    loop {
+        let (index, c) = match iterator.next() {
+            Some(c) => c,
+            None => break
+        };
+        if c == '"' {
+            return Ok((&i[index..], buffer))
+        } else if c == '\\' {
+            let (_, escaped_c) = match iterator.next() {
+                Some(c) => c,
+                None => {
+                    return Err(Err::Incomplete(Needed::new(1337)));
+                }
+            };
+            buffer.push(match escaped_c {
                 'n' => '\n',
                 't' => '\t',
-                x => x,
-            };
-            Ok((rest, c))
+                '\\' => '\\',
+                '"' => '"',
+                'u' => {
+                    let mut digits = String::new();
+                    for _ in 0..4 {
+                        digits.push(
+                            match iterator.next() {
+                                Some((_, c)) => c,
+                                None => {
+                                    return Err(Err::Incomplete(Needed::new(12)));
+                                }
+                            }
+                        )
+                    }
+                    let num = u32::from_str_radix(&digits, 16).expect("Couldn't parse str radix");
+                    let c = std::char::from_u32(num).expect("Couldn't create char from parsed str radix");
+                    c
+                },
+                _ => return Err(Err::Incomplete(Needed::new(1337)))
+            });
+        } else {
+            buffer.push(c);
         }
-        Err(x) => Err(x),
-    });
-    let string_path = alt((unicode_letter, escaped, any_string_char));
-    match many0(string_path)(i) {
-        Ok((rest, parts)) => Ok((rest, parts.iter().collect())),
-        Err(x) => Err(x),
     }
-}
 
-fn unicode_letter<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, char, E> {
-    let four_digits = |x: &'a str| take_while_m_n(4, 4, |c: char| c.is_digit(16))(x);
-    let (rest, digits) = preceded(tag("\\u"), four_digits)(i)?;
-    let num = u32::from_str_radix(digits, 16).expect("Couldn't parse str radix");
-    let c = std::char::from_u32(num).expect("Couldn't create char from parsed str radix");
-    Ok((rest, c))
+    return Err(Err::Incomplete(Needed::new(1337)));
 }
 
 #[cfg(test)]
@@ -177,9 +204,9 @@ mod test {
     }
 
     #[test]
-    fn test_unicode_letter() {
-        let parsed = unicode_letter::<(&str, ErrorKind)>("\\u003d");
-        assert_eq!(parsed, Ok(("", '=')));
+    fn test_unicode_letter_string() {
+        let parsed = string::<(&str, ErrorKind)>("\"\\u003d\"");
+        assert_eq!(parsed, Ok(("", "=".to_string())));
     }
 
     #[test]

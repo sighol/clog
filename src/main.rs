@@ -11,11 +11,10 @@ use chrono::Duration;
 use chrono::Local;
 use chrono::Utc;
 use color_eyre::Result;
+use colored::{Color, Colorize};
 use eyre::bail;
 use eyre::Context;
 use nom::error::ErrorKind;
-use owo_colors::Stream;
-use owo_colors::{OwoColorize, Style};
 
 use parser::{root, JsonValue};
 
@@ -53,15 +52,9 @@ impl LogLine {
     {
         let time_in_timezone = self.time.with_timezone(&config.tz());
         let time_in_timezone = time_in_timezone.format("%Y-%m-%d %H:%M:%S%.3f");
-        write!(
-            f,
-            "{}",
-            time_in_timezone
-                .to_string()
-                .if_supports_color(Stream::Stdout, |t| t.green())
-        )?;
+        write!(f, "{}", time_in_timezone.to_string().green())?;
         if !config.is_local_timezone {
-            write!(f, "{}", "Z".if_supports_color(Stream::Stdout, |t| t.green()))?;
+            write!(f, "{}", "Z".green())?;
         }
         // process id or request_id
         if let Some(process_id) = self.value(&self.parsed_map, "context.processId") {
@@ -74,15 +67,11 @@ impl LogLine {
             write!(f, " [{:<8}]", request_id)?;
         }
 
-        let extra_styles = vec![
-            Style::new().bright_yellow(),
-            Style::new().bright_cyan(),
-            Style::new().bright_magenta(),
-        ];
+        let extra_colors = vec![Color::BrightBlack, Color::BrightCyan, Color::BrightMagenta];
         for (i, e) in config.extra.iter().enumerate() {
-            let style = extra_styles[i % extra_styles.len()];
+            let color = extra_colors[i % extra_colors.len()];
             if let Some(app) = self.value(&self.parsed_map, e) {
-                write!(f, " [{}]", app.style(style))?;
+                write!(f, " [{}]", app.color(color))?;
             } else {
                 write!(f, " []")?;
             }
@@ -90,25 +79,22 @@ impl LogLine {
 
         let severity = self.severity.to_lowercase();
         let (severity_style, message_style) = if severity.contains("warn") {
-            (Style::new().yellow(), Style::new().yellow())
+            (Color::Yellow, Color::Yellow)
         } else if severity.contains("error") {
-            (Style::new().red(), Style::new().red())
+            (Color::Red, Color::Red)
         } else if severity.contains("debug") {
-            (Style::new().bright_black(), Style::new().bright_black())
+            (Color::BrightBlack, Color::BrightBlack)
         } else if severity.contains("fatal") {
-            (Style::new().magenta(), Style::new().magenta())
+            (Color::Magenta, Color::Magenta)
         } else {
-            (Style::new().bright_black(), Style::new())
+            (Color::BrightBlack, Color::White)
         };
         write!(
             f,
             " {:7}",
-            self.severity
-                .to_uppercase()
-                .if_supports_color(Stream::Stdout, |text| text.style(severity_style))
-                .if_supports_color(Stream::Stdout, |text| text.bold())
+            self.severity.to_uppercase().color(severity_style).bold()
         )?;
-        writeln!(f, " {}", self.message.style(message_style))?;
+        writeln!(f, " {}", self.message.color(message_style))?;
         if config.verbose {
             write_logline_map(f, &self.parsed_map, &String::from("  "), &self.message)?;
         }
@@ -312,7 +298,7 @@ impl Parser {
                     Ok(x) => ParserOutput::Log(x),
                     Err(e) => {
                         if self.debug {
-                            eprintln!("Failed get_log_line: {:?}", e.red())
+                            eprintln!("Failed get_log_line: {:?}", e.to_string().red())
                         }
                         ParserOutput::Text(self.buffer.clone())
                     }
@@ -331,7 +317,7 @@ impl Parser {
             Err(Incomplete(_)) => vec![],
             Err(Failure(_)) | Err(Error(_)) => {
                 if self.debug {
-                    eprintln!("Parsing failure: {:?}", result.red());
+                    eprintln!("Parsing failure: {:?}", format!("{:?}", result).red());
                 }
                 let output = ParserOutput::Text(self.buffer.clone());
                 self.buffer.clear();
@@ -359,7 +345,7 @@ struct Cli {
     #[arg(short, long, help = "Show all additional info in a map")]
     verbose: bool,
 
-    #[arg(long, help="Output timestamps in UTC")]
+    #[arg(long, help = "Output timestamps in UTC")]
     utc: bool,
 }
 
@@ -375,8 +361,8 @@ fn main() -> eyre::Result<()> {
 
     let args: Cli = Cli::parse();
     match args.color {
-        ColorChoice::Always => owo_colors::set_override(true),
-        ColorChoice::Never => owo_colors::set_override(false),
+        ColorChoice::Always => colored::control::set_override(true),
+        ColorChoice::Never => colored::control::set_override(false),
         _ => {}
     };
 
@@ -422,7 +408,7 @@ mod test {
     }
 
     fn before() {
-        owo_colors::set_override(false);
+        colored::control::set_override(false);
     }
 
     #[test]
@@ -492,7 +478,6 @@ mod test {
     #[test]
     fn buyan_input() {
         before();
-        owo_colors::set_override(false);
         let input = r#"{
             "v": 0,
             "name": "tracing_demo",
