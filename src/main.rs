@@ -197,7 +197,8 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
         .or_else(|_| parsed.map_value("Timestamp"))?;
 
     let time: DateTime<Utc> = if let Ok(time_str) = time_json.str_value() {
-        Utc.datetime_from_str(&time_str, "%+")
+        DateTime::parse_from_str(&time_str, "%+")
+            .map(|dt| dt.with_timezone(&Utc))
             .context(format!("Failed to parse datetime: `{}`", &time_str))?
     } else {
         let seconds_value = time_json.map_value("seconds")?.int_value()?;
