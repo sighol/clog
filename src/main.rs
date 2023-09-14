@@ -476,6 +476,84 @@ mod test {
     }
 
     #[test]
+    fn event_time_input_and_extra() {
+        let input = r#"{
+            "eventTime": "2023-03-15T14:36:07.937134597+00:00",
+            "message": "something something",
+            "reportLocation": {
+              "filePath": "libraries/observability/src/logging/mod.rs",
+              "lineNumber": 70,
+              "modulePath": "observability::logging"
+            },
+            "serviceContext": {
+              "service": "robotics_services",
+              "version": "0.2.1"
+            },
+            "severity": "ERROR"
+          }"#;
+
+        let mut parser = Parser::new();
+        let output = parser.push(input);
+        let mut buffer = Vec::new();
+        output[0].print(
+            &mut buffer,
+            &PrintConfig {
+                extra: vec!["reportLocation.modulePath".to_string()],
+                verbose: false,
+                is_local_timezone: false,
+            },
+        ).unwrap();
+        let buffer_str = String::from_utf8(buffer).unwrap();
+        assert_eq!(
+            &buffer_str,
+            "2023-03-15 14:36:07.937Z [observability::logging] ERROR   something something\n"
+        );
+    }
+
+    #[test]
+    fn event_time_and_at_timestamp() {
+        let input = r#"{
+            "event": "Refreshing project usage data",
+            "@timestamp": "2023-09-14T12:39:35.604694Z",
+            "level": "debug",
+            "db": {
+              "connection_wait_time_ms": 0,
+              "sql_statement_hash": "abc123"
+            },
+            "project": null,
+            "callsite": {
+              "pathname": "/app/okkeeper.py",
+              "filename": "bookkeeper.py",
+              "module": "bookkeeper",
+              "func_name": "_keep_refreshing_usage_data",
+              "lineno": 116,
+              "my_bool": true,
+              "my_list": [1, 2, 3],
+              "thread": 140450880908160,
+              "thread_name": "MainThread"
+            }
+          }
+          "#;
+
+        let mut parser = Parser::new();
+        let output = parser.push(input);
+        let mut buffer = Vec::new();
+        output[0].print(
+            &mut buffer,
+            &PrintConfig {
+                extra: vec!["callsite.module".to_string()],
+                verbose: false,
+                is_local_timezone: false,
+            },
+        ).unwrap();
+        let buffer_str = String::from_utf8(buffer).unwrap();
+        assert_eq!(
+            &buffer_str,
+            "2023-09-14 12:39:35.604Z [bookkeeper] DEBUG   Refreshing project usage data\n"
+        );
+    }
+
+    #[test]
     fn buyan_input() {
         before();
         let input = r#"{
