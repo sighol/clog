@@ -4,16 +4,14 @@ use std::str;
 use eyre::{eyre, Result};
 use nom::{
     branch::alt,
-    bytes::streaming::{tag, take_while, take_while_m_n},
-    character::streaming::{char, none_of, one_of},
+    bytes::streaming::{tag, take_while},
+    character::streaming::char,
     combinator::{cut, map, value},
-    error::{ParseError, Error, ErrorKind},
-    multi::{many0, separated_list0},
+    error::{Error, ErrorKind, ParseError},
+    multi::separated_list0,
     number::streaming::double,
     sequence::{preceded, separated_pair, terminated},
-    IResult,
-    Parser,
-    Err, Needed, Slice,
+    Err, IResult, Needed,
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -54,23 +52,23 @@ impl JsonValue {
     }
 }
 
-fn space<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
+fn space<'a>(i: &'a str) -> IResult<&'a str, &'a str> {
     let chars = " \t\r\n";
     take_while(move |c| chars.contains(c))(i)
 }
 
-fn null<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, JsonValue, E> {
+fn null<'a>(i: &'a str) -> IResult<&'a str, JsonValue> {
     tag("null")(i).and_then(|(i, _o)| Ok((i, JsonValue::Null)))
 }
 
-fn bool<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, JsonValue, E> {
+fn bool<'a>(input: &'a str) -> IResult<&'a str, JsonValue> {
     let parse_true = value(JsonValue::Bool(true), tag("true"));
     let parse_false = value(JsonValue::Bool(false), tag("false"));
 
     alt((parse_true, parse_false))(input)
 }
 
-fn key_value<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, (String, JsonValue), E> {
+fn key_value<'a>(i: &'a str) -> IResult<&'a str, (String, JsonValue)> {
     separated_pair(
         preceded(space, string),
         cut(preceded(space, char(':'))),
@@ -78,7 +76,7 @@ fn key_value<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, (String
     )(i)
 }
 
-fn hash<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, HashMap<String, JsonValue>, E> {
+fn hash<'a>(i: &'a str) -> IResult<&'a str, HashMap<String, JsonValue>> {
     preceded(
         char('{'),
         cut(terminated(
@@ -95,7 +93,7 @@ fn hash<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, HashMap<Stri
 /// accumulating results in a `Vec`, until it encounters an error.
 /// If you want more control on the parser application, check out the `iterator`
 /// combinator (cf `examples/iterator.rs`)
-fn array<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Vec<JsonValue>, E> {
+fn array<'a>(i: &'a str) -> IResult<&'a str, Vec<JsonValue>> {
     preceded(
         char('['),
         cut(terminated(
@@ -105,7 +103,7 @@ fn array<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Vec<JsonVal
     )(i)
 }
 
-fn json_value<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, JsonValue, E> {
+fn json_value<'a>(i: &'a str) -> IResult<&'a str, JsonValue> {
     preceded(
         space,
         alt((
@@ -119,34 +117,35 @@ fn json_value<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, JsonVa
     )(i)
 }
 
-pub fn root<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, JsonValue, E> {
+pub fn root<'a>(i: &'a str) -> IResult<&'a str, JsonValue> {
     preceded(space, map(hash, JsonValue::Object))(i)
 }
 
-fn string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, String, E> {
+fn string<'a>(i: &'a str) -> IResult<&'a str, String> {
     preceded(char('\"'), cut(terminated(string_inner, char('\"'))))(i)
 }
 
-fn  my_error<'a>(i: &'a str) -> IResult<&'a str, String> {
-    return Err(Err::Error(Error::from_error_kind(i, ErrorKind::Char)));
-}
-
-fn string_inner<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, String, E> {
+fn string_inner<'a>(i: &'a str) -> IResult<&'a str, String> {
+    // Although this could have been solved with parser combinators, it was much
+    // faster with hand coding.
     let mut buffer = String::new();
     let mut iterator = i.char_indices();
 
     loop {
         let (index, c) = match iterator.next() {
             Some(c) => c,
-            None => break
+            None => break,
         };
         if c == '"' {
-            return Ok((&i[index..], buffer))
+            return Ok((&i[index..], buffer));
         } else if c == '\\' {
             let (_, escaped_c) = match iterator.next() {
                 Some(c) => c,
                 None => {
-                    return Err(Err::Incomplete(Needed::new(1337)));
+                    return Err(Err::Failure(Error::from_error_kind(
+                        &i[index..],
+                        ErrorKind::Char,
+                    )));
                 }
             };
             buffer.push(match escaped_c {
@@ -157,32 +156,38 @@ fn string_inner<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Stri
                 'u' => {
                     let mut digits = String::new();
                     for _ in 0..4 {
-                        digits.push(
-                            match iterator.next() {
-                                Some((_, c)) => c,
-                                None => {
-                                    return Err(Err::Incomplete(Needed::new(12)));
-                                }
+                        digits.push(match iterator.next() {
+                            Some((_, c)) => c,
+                            None => {
+                                return Err(Err::Failure(Error::from_error_kind(
+                                    &i[index..],
+                                    ErrorKind::Char,
+                                )));
                             }
-                        )
+                        })
                     }
                     let num = u32::from_str_radix(&digits, 16).expect("Couldn't parse str radix");
-                    let c = std::char::from_u32(num).expect("Couldn't create char from parsed str radix");
+                    let c = std::char::from_u32(num)
+                        .expect("Couldn't create char from parsed str radix");
                     c
-                },
-                _ => return Err(Err::Incomplete(Needed::new(1337)))
+                }
+                _ => {
+                    return Err(Err::Failure(Error::from_error_kind(
+                        &i[index..],
+                        ErrorKind::Char,
+                    )))
+                }
             });
         } else {
             buffer.push(c);
         }
     }
 
-    return Err(Err::Incomplete(Needed::new(1337)));
+    return Err(Err::Incomplete(Needed::new(1)));
 }
 
 #[cfg(test)]
 mod test {
-    use nom::error::ErrorKind;
     use proptest::{collection::hash_map, num, prelude::*};
     use proptest_recurse::{StrategyExt, StrategySet};
     use serde_json::{Number, Value};
@@ -205,14 +210,14 @@ mod test {
 
     #[test]
     fn test_unicode_letter_string() {
-        let parsed = string::<(&str, ErrorKind)>("\"\\u003d\"");
+        let parsed = string("\"\\u003d\"");
         assert_eq!(parsed, Ok(("", "=".to_string())));
     }
 
     #[test]
     fn test_string_with_newline() {
         let input = "\"a\\nb\"";
-        let parsed = string::<(&str, ErrorKind)>(input);
+        let parsed = string(input);
         assert_eq!(parsed, Ok(("", "a\nb".to_string())));
     }
 
@@ -220,7 +225,7 @@ mod test {
     fn string_with_quote() {
         let input = r#""This is a string with '\"' quotes.""#;
         let expected = r#"This is a string with '"' quotes."#.to_string();
-        let parsed = string::<(&str, ErrorKind)>(input);
+        let parsed = string(input);
         assert_eq!(parsed, Ok(("", expected)));
     }
 
@@ -254,7 +259,7 @@ mod test {
         // cannot be parsed. If it fails, something should be parsed and isn't,
         #[test]
         fn can_parse(input in arb_json_str(&mut Default::default())){
-            let (remainder, _obj) = root::<(&str, ErrorKind)>(&input)?;
+            let (remainder, _obj) = root(&input)?;
             prop_assert_eq!("", remainder);
         }
     }

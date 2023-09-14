@@ -14,7 +14,6 @@ use color_eyre::Result;
 use colored::{Color, Colorize};
 use eyre::bail;
 use eyre::Context;
-use nom::error::ErrorKind;
 
 use parser::{root, JsonValue};
 
@@ -291,7 +290,7 @@ impl Parser {
 
         self.buffer.push_str(line);
 
-        let result = root::<(&str, ErrorKind)>(&self.buffer);
+        let result = root(&self.buffer);
         match result {
             Ok((rest, value)) => {
                 let output = match get_log_line(value) {
