@@ -149,7 +149,7 @@ where
             JsonValue::Str(s) => Some(s.clone()),
             JsonValue::Object(map) => {
                 if map.len() == 0 {
-                    writeln!(f, "{}{}: []", indent, key.bright_black())?;
+                    writeln!(f, "{}{}: {}", indent, key.bright_black(), "{}".italic().bright_black())?;
                 } else {
                     writeln!(f, "{}{}:", indent, key.bright_black())?;
                     write_logline_map(f, map, &format!("  {}", indent), message)?;
