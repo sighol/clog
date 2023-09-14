@@ -126,26 +126,24 @@ fn string<'a>(i: &'a str) -> IResult<&'a str, String> {
 }
 
 fn string_inner<'a>(i: &'a str) -> IResult<&'a str, String> {
-    // Although this could have been solved with parser combinators, it was much
-    // faster with hand coding.
-    let mut buffer = String::new();
-    let mut iterator = i.char_indices();
+    // Although this could have been solved with parser combinators, it was
+    // twice as fast with hand coding.
+    let mut buffer = String::with_capacity(256 as usize);
+    let mut iterator = i.chars();
 
     loop {
-        let (index, c) = match iterator.next() {
+        let i = iterator.as_str();
+        let c = match iterator.next() {
             Some(c) => c,
             None => break,
         };
         if c == '"' {
-            return Ok((&i[index..], buffer));
+            return Ok((i, buffer));
         } else if c == '\\' {
-            let (_, escaped_c) = match iterator.next() {
+            let escaped_c = match iterator.next() {
                 Some(c) => c,
                 None => {
-                    return Err(Err::Failure(Error::from_error_kind(
-                        &i[index..],
-                        ErrorKind::Char,
-                    )));
+                    return Err(Err::Failure(Error::from_error_kind(i, ErrorKind::Char)));
                 }
             };
             buffer.push(match escaped_c {
@@ -157,10 +155,10 @@ fn string_inner<'a>(i: &'a str) -> IResult<&'a str, String> {
                     let mut digits = String::new();
                     for _ in 0..4 {
                         digits.push(match iterator.next() {
-                            Some((_, c)) => c,
+                            Some(c) => c,
                             None => {
                                 return Err(Err::Failure(Error::from_error_kind(
-                                    &i[index..],
+                                    i,
                                     ErrorKind::Char,
                                 )));
                             }
@@ -171,12 +169,7 @@ fn string_inner<'a>(i: &'a str) -> IResult<&'a str, String> {
                         .expect("Couldn't create char from parsed str radix");
                     c
                 }
-                _ => {
-                    return Err(Err::Failure(Error::from_error_kind(
-                        &i[index..],
-                        ErrorKind::Char,
-                    )))
-                }
+                _ => return Err(Err::Failure(Error::from_error_kind(i, ErrorKind::Char))),
             });
         } else {
             buffer.push(c);
