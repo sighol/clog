@@ -12,6 +12,8 @@ use chrono::Local;
 use chrono::Utc;
 use color_eyre::owo_colors::{OwoColorize, Style};
 use color_eyre::Result;
+use colored::Colorize;
+use eyre::bail;
 use eyre::Context;
 use nom::error::ErrorKind;
 
@@ -30,6 +32,7 @@ struct LogLine {
 
 struct PrintConfig {
     pub extra: Vec<String>,
+    pub verbose: bool,
     pub is_local_timezone: bool,
 }
 
@@ -96,7 +99,16 @@ impl LogLine {
             " {:7}",
             self.severity.to_uppercase().bold().style(severity_style)
         )?;
-        writeln!(f, " {}", self.message.style(message_style))
+        writeln!(f, " {}", self.message.style(message_style))?;
+        if config.verbose {
+            let mut sorted_keys: Vec<_> = self.context.keys().clone().into_iter().collect();
+            sorted_keys.sort();
+            for key in sorted_keys.into_iter() {
+                let value = &self.context[key];
+                writeln!(f, "   {} = {}", key.bright_black(), value)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -112,10 +124,15 @@ fn bunyan_to_level(level: i32) -> &'static str {
 }
 
 fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
+    let parsed = match parsed {
+        JsonValue::Object(_) => parsed,
+        _ => bail!("parsed is not a JsonValue::Object"),
+    };
     let time_json = parsed
         .map_value("timestamp")
         .or_else(|_| parsed.map_value("time"))
         .or_else(|_| parsed.map_value("eventTime"))
+        .or_else(|_| parsed.map_value("@timestamp"))
         .or_else(|_| parsed.map_value("Timestamp"))?;
 
     let time: DateTime<Utc> = if let Ok(time_str) = time_json.str_value() {
@@ -139,11 +156,13 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
                 .and_then(|level| level.int_value())
                 .and_then(|level| Ok(bunyan_to_level(level as i32).to_string()))
         })
+        .or_else(|_| parsed.map_value("level").and_then(|x| x.str_value()))
         .unwrap_or_else(|_| "unknown".to_string());
 
     let message = parsed
         .map_value("message")
         .or_else(|_| parsed.map_value("msg"))
+        .or_else(|_| parsed.map_value("event"))
         .or_else(|_| parsed.map_value("MessageTemplate"))
         .and_then(|x| x.str_value())?;
 
@@ -161,6 +180,19 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
         for (key, json_value) in context_json_map {
             if let JsonValue::Str(value) = json_value {
                 context.insert(key.clone(), value.clone());
+            }
+        }
+    }
+
+    if let JsonValue::Object(map) = parsed {
+        for (key, json_value) in map {
+            let string_value = match json_value {
+                JsonValue::Num(num) => Some(num.to_string()),
+                JsonValue::Str(s) => Some(s.clone()),
+                _ => None,
+            };
+            if let Some(string_value) = string_value {
+                context.insert(key.clone(), string_value);
             }
         }
     }
@@ -263,6 +295,9 @@ struct Cli {
         help = "Turn on debug mode. All lines that can't be parsed will be output to stderr"
     )]
     debug: bool,
+
+    #[arg(short, long, help = "Show all additional info in a map")]
+    verbose: bool,
 }
 
 #[derive(ClapValueEnum, Clone, Debug)]
@@ -285,6 +320,7 @@ fn main() -> eyre::Result<()> {
     let print_config = PrintConfig {
         extra: args.extra,
         is_local_timezone: true,
+        verbose: args.verbose,
     };
 
     let mut parser = Parser::new();
@@ -314,6 +350,7 @@ mod test {
             let config = PrintConfig {
                 extra: vec![],
                 is_local_timezone: false,
+                verbose: false,
             };
             let mut s = Vec::<u8>::new();
             self.print(&mut s, &config).expect("Fail to write");
