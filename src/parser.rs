@@ -21,6 +21,7 @@ pub enum JsonValue {
     Num(f64),
     Bool(bool),
     Object(HashMap<String, JsonValue>),
+    Array(Vec<JsonValue>),
 }
 
 impl JsonValue {
@@ -88,11 +89,26 @@ fn hash<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, HashMap<Stri
     )(i)
 }
 
+/// some combinators, like `separated_list0` or `many0`, will call a parser repeatedly,
+/// accumulating results in a `Vec`, until it encounters an error.
+/// If you want more control on the parser application, check out the `iterator`
+/// combinator (cf `examples/iterator.rs`)
+fn array<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Vec<JsonValue>, E> {
+    preceded(
+        char('['),
+        cut(terminated(
+            separated_list0(preceded(space, char(',')), json_value),
+            preceded(space, char(']')),
+        )),
+    )(i)
+}
+
 fn json_value<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, JsonValue, E> {
     preceded(
         space,
         alt((
             map(hash, JsonValue::Object),
+            map(array, JsonValue::Array),
             map(string, JsonValue::Str),
             map(double, JsonValue::Num),
             bool,

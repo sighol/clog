@@ -119,6 +119,7 @@ impl LogLine {
                     Some(JsonValue::Num(n)) => Some(format!("{}", n)),
                     Some(JsonValue::Str(s)) => Some(format!("{}", s)),
                     Some(JsonValue::Bool(b)) => Some(format!("{}", b)),
+                    Some(JsonValue::Array(value)) => Some(format!("{:?}", value)),
                     Some(JsonValue::Null) => None,
                     None => None,
                 };
@@ -152,6 +153,7 @@ where
             JsonValue::Num(n) => Some(format!("{}", n)),
             JsonValue::Str(s) => Some(format!("{}", s)),
             JsonValue::Bool(b) => Some(format!("{}", b)),
+            JsonValue::Array(value) => Some(format!("{:?}", value)),
             JsonValue::Object(map) => {
                 if map.len() == 0 {
                     writeln!(
