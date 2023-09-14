@@ -11,6 +11,7 @@ use chrono::Duration;
 use chrono::Local;
 use chrono::Utc;
 use color_eyre::Result;
+use eyre::bail;
 use eyre::Context;
 use nom::error::ErrorKind;
 use owo_colors::Stream;
@@ -21,16 +22,17 @@ use parser::{root, JsonValue};
 use clap::Parser as ClapParser;
 use clap::ValueEnum as ClapValueEnum;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct LogLine {
     pub time: DateTime<Utc>,
     pub severity: String,
     pub message: String,
-    pub context: HashMap<String, String>,
+    pub parsed_map: HashMap<String, JsonValue>,
 }
 
 struct PrintConfig {
     pub extra: Vec<String>,
+    pub verbose: bool,
     pub is_local_timezone: bool,
 }
 
@@ -62,15 +64,11 @@ impl LogLine {
             write!(f, "{}", "Z".green())?;
         }
         // process id or request_id
-        if let Some(process_id) = self.context.get("processId") {
+        if let Some(process_id) = self.value(&self.parsed_map, "context.processId") {
             let max_len = std::cmp::min(process_id.len(), 6);
             let process_id = process_id[..max_len].to_string();
-            write!(
-                f,
-                " [p={:6}]",
-                process_id.if_supports_color(Stream::Stdout, |t| t.bold())
-            )?;
-        } else if let Some(request_id) = self.context.get("requestId") {
+            write!(f, " [p={:6}]", process_id.bold())?;
+        } else if let Some(request_id) = self.value(&self.parsed_map, "context.requestId") {
             let max_len = std::cmp::min(request_id.len(), 8);
             let request_id = request_id[..max_len].to_string();
             write!(f, " [{:<8}]", request_id)?;
@@ -83,12 +81,8 @@ impl LogLine {
         ];
         for (i, e) in config.extra.iter().enumerate() {
             let style = extra_styles[i % extra_styles.len()];
-            if let Some(app) = self.context.get(e) {
-                write!(
-                    f,
-                    " [{}]",
-                    app.if_supports_color(Stream::Stdout, |t| t.style(style))
-                )?;
+            if let Some(app) = self.value(&self.parsed_map, e) {
+                write!(f, " [{}]", app.style(style))?;
             } else {
                 write!(f, " []")?;
             }
@@ -114,13 +108,84 @@ impl LogLine {
                 .if_supports_color(Stream::Stdout, |text| text.style(severity_style))
                 .if_supports_color(Stream::Stdout, |text| text.bold())
         )?;
-        writeln!(
-            f,
-            " {}",
-            self.message
-                .if_supports_color(Stream::Stdout, |t| t.style(message_style))
-        )
+        writeln!(f, " {}", self.message.style(message_style))?;
+        if config.verbose {
+            write_logline_map(f, &self.parsed_map, &String::from("  "), &self.message)?;
+        }
+        Ok(())
     }
+
+    fn value(&self, map: &HashMap<String, JsonValue>, key: &str) -> Option<String> {
+        let parts: Vec<_> = key.split(".").collect();
+        let parts_len = parts.len();
+        let mut map = map;
+        for (i, part) in parts.into_iter().enumerate() {
+            let is_last = i == parts_len - 1;
+            let part_value = map.get(part);
+            if is_last {
+                return match part_value {
+                    Some(JsonValue::Object(m)) => Some(format!("{:?}", m)),
+                    Some(JsonValue::Num(n)) => Some(format!("{}", n)),
+                    Some(JsonValue::Str(s)) => Some(format!("{}", s)),
+                    Some(JsonValue::Bool(b)) => Some(format!("{}", b)),
+                    Some(JsonValue::Array(value)) => Some(format!("{:?}", value)),
+                    Some(JsonValue::Null) => None,
+                    None => None,
+                };
+            } else if let Some(JsonValue::Object(m)) = part_value {
+                map = m
+            } else {
+                return None;
+            }
+        }
+        panic!("Unreachable")
+    }
+}
+
+fn write_logline_map<W>(
+    f: &mut W,
+    map: &HashMap<String, JsonValue>,
+    indent: &str,
+    message: &str,
+) -> std::io::Result<()>
+where
+    W: Write,
+{
+    let mut sorted_keys: Vec<_> = map.keys().clone().into_iter().collect();
+    sorted_keys.sort();
+    for key in sorted_keys.into_iter() {
+        if key == "timestamp" || key == "@timestamp" {
+            continue;
+        }
+        let value = match &map[key] {
+            JsonValue::Null => None,
+            JsonValue::Num(n) => Some(format!("{}", n)),
+            JsonValue::Str(s) => Some(format!("{}", s)),
+            JsonValue::Bool(b) => Some(format!("{}", b)),
+            JsonValue::Array(value) => Some(format!("{:?}", value)),
+            JsonValue::Object(map) => {
+                if map.len() == 0 {
+                    writeln!(
+                        f,
+                        "{}{}: {}",
+                        indent,
+                        key.bright_black(),
+                        "{}".italic().bright_black()
+                    )?;
+                } else {
+                    writeln!(f, "{}{}:", indent, key.bright_black())?;
+                    write_logline_map(f, map, &format!("  {}", indent), message)?;
+                }
+                None
+            }
+        };
+        if let Some(value) = value {
+            if value != message {
+                writeln!(f, "{}{} = {}", indent, key.bright_black(), value)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn bunyan_to_level(level: i32) -> &'static str {
@@ -135,10 +200,15 @@ fn bunyan_to_level(level: i32) -> &'static str {
 }
 
 fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
+    let parsed = match parsed {
+        JsonValue::Object(_) => parsed,
+        _ => bail!("parsed is not a JsonValue::Object"),
+    };
     let time_json = parsed
         .map_value("timestamp")
         .or_else(|_| parsed.map_value("time"))
         .or_else(|_| parsed.map_value("eventTime"))
+        .or_else(|_| parsed.map_value("@timestamp"))
         .or_else(|_| parsed.map_value("Timestamp"))?;
 
     let time: DateTime<Utc> = if let Ok(time_str) = time_json.str_value() {
@@ -162,11 +232,13 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
                 .and_then(|level| level.int_value())
                 .and_then(|level| Ok(bunyan_to_level(level as i32).to_string()))
         })
+        .or_else(|_| parsed.map_value("level").and_then(|x| x.str_value()))
         .unwrap_or_else(|_| "unknown".to_string());
 
     let message = parsed
         .map_value("message")
         .or_else(|_| parsed.map_value("msg"))
+        .or_else(|_| parsed.map_value("event"))
         .or_else(|_| parsed.map_value("MessageTemplate"))
         .and_then(|x| x.str_value())?;
 
@@ -175,27 +247,21 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
     } else {
         message
     };
-    let context_value = parsed.map_value("context");
-    let mut context = HashMap::<String, String>::new();
-    // XXX (robertc) this throws away an Err() when the key is not an object,
-    // but the severity and message cases above do not similarly fail
-    // gracefully.
-    if let Ok(JsonValue::Object(context_json_map)) = context_value {
-        for (key, json_value) in context_json_map {
-            if let JsonValue::Str(value) = json_value {
-                context.insert(key.clone(), value.clone());
-            }
-        }
-    }
+
+    let map = match parsed {
+        JsonValue::Object(map) => map,
+        _ => bail!("Parsed is not a map"),
+    };
+
     Ok(LogLine {
         time,
         message,
         severity,
-        context,
+        parsed_map: map,
     })
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 enum ParserOutput {
     None,
     Text(String),
@@ -246,8 +312,9 @@ impl Parser {
                     Ok(x) => ParserOutput::Log(x),
                     Err(e) => {
                         if self.debug {
-                            eprintln!("Failed to parse: {:?}", e)
+                            eprintln!("Failed get_log_line: {:?}", e.red())
                         }
+                        println!("Self.debug: {}", self.debug);
                         ParserOutput::Text(self.buffer.clone())
                     }
                 };
@@ -264,6 +331,9 @@ impl Parser {
             }
             Err(Incomplete(_)) => vec![],
             Err(Failure(_)) | Err(Error(_)) => {
+                if self.debug {
+                    eprintln!("Parsing failure: {:?}", result.red());
+                }
                 let output = ParserOutput::Text(self.buffer.clone());
                 self.buffer.clear();
                 vec![output]
@@ -286,6 +356,9 @@ struct Cli {
         help = "Turn on debug mode. All lines that can't be parsed will be output to stderr"
     )]
     debug: bool,
+
+    #[arg(short, long, help = "Show all additional info in a map")]
+    verbose: bool,
 }
 
 #[derive(ClapValueEnum, Clone, Debug)]
@@ -308,6 +381,7 @@ fn main() -> eyre::Result<()> {
     let print_config = PrintConfig {
         extra: args.extra,
         is_local_timezone: true,
+        verbose: args.verbose,
     };
 
     let mut parser = Parser::new();
@@ -337,6 +411,7 @@ mod test {
             let config = PrintConfig {
                 extra: vec![],
                 is_local_timezone: false,
+                verbose: false,
             };
             let mut s = Vec::<u8>::new();
             self.print(&mut s, &config).expect("Fail to write");

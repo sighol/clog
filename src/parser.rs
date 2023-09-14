@@ -6,7 +6,7 @@ use nom::{
     branch::alt,
     bytes::streaming::{tag, take_while, take_while_m_n},
     character::streaming::{char, none_of, one_of},
-    combinator::{cut, map},
+    combinator::{cut, map, value},
     error::ParseError,
     multi::{many0, separated_list0},
     number::streaming::double,
@@ -14,12 +14,14 @@ use nom::{
     IResult,
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum JsonValue {
     Str(String),
     Null,
     Num(f64),
+    Bool(bool),
     Object(HashMap<String, JsonValue>),
+    Array(Vec<JsonValue>),
 }
 
 impl JsonValue {
@@ -59,6 +61,13 @@ fn null<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, JsonValue, E
     tag("null")(i).and_then(|(i, _o)| Ok((i, JsonValue::Null)))
 }
 
+fn bool<'a, E: ParseError<&'a str>>(input: &'a str) -> IResult<&'a str, JsonValue, E> {
+    let parse_true = value(JsonValue::Bool(true), tag("true"));
+    let parse_false = value(JsonValue::Bool(false), tag("false"));
+
+    alt((parse_true, parse_false))(input)
+}
+
 fn key_value<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, (String, JsonValue), E> {
     separated_pair(
         preceded(space, string),
@@ -80,13 +89,29 @@ fn hash<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, HashMap<Stri
     )(i)
 }
 
+/// some combinators, like `separated_list0` or `many0`, will call a parser repeatedly,
+/// accumulating results in a `Vec`, until it encounters an error.
+/// If you want more control on the parser application, check out the `iterator`
+/// combinator (cf `examples/iterator.rs`)
+fn array<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Vec<JsonValue>, E> {
+    preceded(
+        char('['),
+        cut(terminated(
+            separated_list0(preceded(space, char(',')), json_value),
+            preceded(space, char(']')),
+        )),
+    )(i)
+}
+
 fn json_value<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, JsonValue, E> {
     preceded(
         space,
         alt((
             map(hash, JsonValue::Object),
+            map(array, JsonValue::Array),
             map(string, JsonValue::Str),
             map(double, JsonValue::Num),
+            bool,
             null,
         )),
     )(i)
