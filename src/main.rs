@@ -495,14 +495,16 @@ mod test {
         let mut parser = Parser::new();
         let output = parser.push(input);
         let mut buffer = Vec::new();
-        output[0].print(
-            &mut buffer,
-            &PrintConfig {
-                extra: vec!["reportLocation.modulePath".to_string()],
-                verbose: false,
-                is_local_timezone: false,
-            },
-        ).unwrap();
+        output[0]
+            .print(
+                &mut buffer,
+                &PrintConfig {
+                    extra: vec!["reportLocation.modulePath".to_string()],
+                    verbose: false,
+                    is_local_timezone: false,
+                },
+            )
+            .unwrap();
         let buffer_str = String::from_utf8(buffer).unwrap();
         assert_eq!(
             &buffer_str,
@@ -538,14 +540,16 @@ mod test {
         let mut parser = Parser::new();
         let output = parser.push(input);
         let mut buffer = Vec::new();
-        output[0].print(
-            &mut buffer,
-            &PrintConfig {
-                extra: vec!["callsite.module".to_string()],
-                verbose: false,
-                is_local_timezone: false,
-            },
-        ).unwrap();
+        output[0]
+            .print(
+                &mut buffer,
+                &PrintConfig {
+                    extra: vec!["callsite.module".to_string()],
+                    verbose: false,
+                    is_local_timezone: false,
+                },
+            )
+            .unwrap();
         let buffer_str = String::from_utf8(buffer).unwrap();
         assert_eq!(
             &buffer_str,

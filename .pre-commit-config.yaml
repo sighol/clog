@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: build
+        name: build
+        entry: python3 scripts/pre-commit.py
+        pass_filenames: true
+        always_run: true
+        language: system
