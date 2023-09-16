@@ -13,6 +13,7 @@ nom = "7.1"
 colored = "2.0.4"
 
 [dev-dependencies]
+pretty_assertions = "1.4.0"
 proptest = "1.0.0"
 proptest-recurse = "0.5.0"
 serde_json = "1.0.66"

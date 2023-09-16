@@ -139,7 +139,7 @@ where
     let mut sorted_keys: Vec<_> = map.keys().clone().into_iter().collect();
     sorted_keys.sort();
     for key in sorted_keys.into_iter() {
-        if key == "timestamp" || key == "@timestamp" {
+        if key == "timestamp" || key == "@timestamp" || key == "severity" || key == "level" {
             continue;
         }
         let value = match &map[key] {
@@ -149,15 +149,7 @@ where
             JsonValue::Bool(b) => Some(format!("{}", b)),
             JsonValue::Array(value) => Some(format!("{:?}", value)),
             JsonValue::Object(map) => {
-                if map.len() == 0 {
-                    writeln!(
-                        f,
-                        "{}{}: {}",
-                        indent,
-                        key.bright_black(),
-                        "{}".italic().bright_black()
-                    )?;
-                } else {
+                if map.len() != 0 {
                     writeln!(f, "{}{}:", indent, key.bright_black())?;
                     write_logline_map(f, map, &format!("  {}", indent), message)?;
                 }
@@ -393,6 +385,7 @@ fn main() -> eyre::Result<()> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use pretty_assertions::assert_eq;
 
     impl ParserOutput {
         fn to_string(&self) -> String {
@@ -555,6 +548,64 @@ mod test {
             &buffer_str,
             "2023-09-14 12:39:35.604Z [bookkeeper] DEBUG   Refreshing project usage data\n"
         );
+    }
+
+    #[test]
+    fn with_verbose_printing() {
+        let input = r#"{
+            "event": "Refreshing project usage data",
+            "@timestamp": "2023-09-14T12:39:35.604694Z",
+            "level": "debug",
+            "db": {
+              "connection_wait_time_ms": 0,
+              "sql_statement_hash": "abc123"
+            },
+            "project": null,
+            "context": {},
+            "callsite": {
+              "pathname": "/app/okkeeper.py",
+              "filename": "bookkeeper.py",
+              "module": "bookkeeper",
+              "func_name": "_keep_refreshing_usage_data",
+              "lineno": 116,
+              "my_bool": true,
+              "my_list": [1, 2, 3],
+              "thread": 140450880908160,
+              "thread_name": "MainThread"
+            }
+          }"#;
+
+        let mut parser = Parser::new();
+        let output = parser.push(input);
+        let mut buffer = Vec::new();
+        for o in output {
+            o.print(
+                &mut buffer,
+                &PrintConfig {
+                    extra: vec!["callsite.module".to_string()],
+                    verbose: true,
+                    is_local_timezone: false,
+                },
+            )
+            .unwrap();
+        }
+        let expected = r#"2023-09-14 12:39:35.604Z [bookkeeper] DEBUG   Refreshing project usage data
+  callsite:
+    filename = bookkeeper.py
+    func_name = _keep_refreshing_usage_data
+    lineno = 116
+    module = bookkeeper
+    my_bool = true
+    my_list = [Num(1.0), Num(2.0), Num(3.0)]
+    pathname = /app/okkeeper.py
+    thread = 140450880908160
+    thread_name = MainThread
+  db:
+    connection_wait_time_ms = 0
+    sql_statement_hash = abc123
+"#;
+        let buffer_str = String::from_utf8(buffer).unwrap();
+        assert_eq!(&buffer_str, expected,);
     }
 
     #[test]
