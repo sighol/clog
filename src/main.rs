@@ -211,6 +211,7 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
                 .and_then(|level| Ok(bunyan_to_level(level as i32).to_string()))
         })
         .or_else(|_| parsed.map_value("level").and_then(|x| x.str_value()))
+        .or_else(|_| parsed.map_value("log.level").and_then(|x| x.str_value()))
         .unwrap_or_else(|_| "unknown".to_string());
 
     let message = parsed
