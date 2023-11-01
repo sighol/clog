@@ -323,7 +323,7 @@ impl Parser {
 #[derive(ClapParser)]
 #[command(version, author)]
 struct Cli {
-    #[arg(value_enum, long="color", default_value_t=ColorChoice::Auto)]
+    #[arg(value_enum, long="color", default_value_t=ColorChoice::Always)]
     color: ColorChoice,
 
     #[arg(short, long, help = "Extra values to print. Eg. X-CDP-SDK")]
