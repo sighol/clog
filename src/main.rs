@@ -79,7 +79,7 @@ impl LogLine {
         let severity = self.severity.to_lowercase();
         let (severity_style, message_style) = if severity.contains("warn") {
             (Color::Yellow, Color::Yellow)
-        } else if severity.contains("error") {
+        } else if severity.contains("error") || severity.contains("critical") {
             (Color::Red, Color::Red)
         } else if severity.contains("debug") {
             (Color::BrightBlack, Color::BrightBlack)
@@ -196,8 +196,8 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
         let seconds_value = time_json.map_value("seconds")?.int_value()?;
         let nanos_value = time_json.map_value("nanos")?.int_value()?;
         let start = Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap();
-        let duration =
-            Duration::seconds(seconds_value as i64) + Duration::nanoseconds(nanos_value as i64);
+        let duration = Duration::try_seconds(seconds_value as i64).unwrap()
+            + Duration::nanoseconds(nanos_value as i64);
         start + duration
     };
 
