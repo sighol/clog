@@ -4,6 +4,7 @@ mod parser;
 use std::collections::HashMap;
 use std::io::Write;
 use std::mem::take;
+use std::str::FromStr;
 
 use chrono::prelude::*;
 use chrono::DateTime;
@@ -13,6 +14,7 @@ use chrono::Utc;
 use color_eyre::Result;
 use colored::{Color, Colorize};
 use eyre::bail;
+use eyre::eyre;
 use eyre::Context;
 
 use parser::{root, JsonValue};
@@ -41,6 +43,30 @@ impl PrintConfig {
         } else {
             Utc.fix()
         }
+    }
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone)]
+enum Severity {
+    Debug,
+    Info,
+    Warning,
+    Error,
+    Fatal,
+}
+
+impl FromStr for Severity {
+    type Err = eyre::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        return match s.to_lowercase().as_ref() {
+            "debug" => Ok(Self::Debug),
+            "info" => Ok(Self::Info),
+            "warn" | "warning" => Ok(Self::Warning),
+            "error" => Ok(Self::Error),
+            "fatal" => Ok(Self::Fatal),
+            _ => Err(eyre!("Unknown severity: {}", s)),
+        };
     }
 }
 
@@ -76,18 +102,14 @@ impl LogLine {
             }
         }
 
-        let severity = self.severity.to_lowercase();
-        let (severity_style, message_style) = if severity.contains("warn") {
-            (Color::Yellow, Color::Yellow)
-        } else if severity.contains("error") || severity.contains("critical") {
-            (Color::Red, Color::Red)
-        } else if severity.contains("debug") {
-            (Color::BrightBlack, Color::BrightBlack)
-        } else if severity.contains("fatal") {
-            (Color::Magenta, Color::Magenta)
-        } else {
-            (Color::BrightBlack, Color::White)
+        let (severity_style, message_style) = match self.severity() {
+            Severity::Debug => (Color::BrightBlack, Color::BrightBlack),
+            Severity::Info => (Color::BrightBlack, Color::White),
+            Severity::Warning => (Color::Yellow, Color::Yellow),
+            Severity::Error => (Color::Red, Color::Red),
+            Severity::Fatal => (Color::Magenta, Color::Magenta),
         };
+
         write!(
             f,
             " {:7}",
@@ -124,6 +146,21 @@ impl LogLine {
             }
         }
         panic!("Unreachable")
+    }
+
+    fn severity(&self) -> Severity {
+        let severity = self.severity.to_lowercase();
+        return if severity.contains("warn") {
+            Severity::Warning
+        } else if severity.contains("error") || severity.contains("critical") {
+            Severity::Error
+        } else if severity.contains("debug") || severity.contains("trace") {
+            Severity::Debug
+        } else if severity.contains("fatal") {
+            Severity::Fatal
+        } else {
+            Severity::Info
+        };
     }
 }
 
@@ -339,6 +376,13 @@ struct Cli {
     #[arg(short, long, help = "Show all additional info in a map")]
     verbose: bool,
 
+    #[arg(
+        short = 's',
+        long,
+        help = "Ignore messages with less important severity"
+    )]
+    min_severity: Option<Severity>,
+
     #[arg(long, help = "Output timestamps in UTC")]
     utc: bool,
 }
@@ -375,6 +419,19 @@ fn main() -> eyre::Result<()> {
         unwrapped.push('\n');
         let outputs = parser.push(&unwrapped);
         for output in outputs {
+            match &args.min_severity {
+                Some(minimum) => {
+                    let is_included = match &output {
+                        ParserOutput::None => false,
+                        ParserOutput::Text(_) => true,
+                        ParserOutput::Log(m) => m.severity() >= *minimum,
+                    };
+                    if !is_included {
+                        continue;
+                    }
+                }
+                None => {}
+            }
             output.print(&mut stdout, &print_config)?;
             stdout.flush()?;
         }
