@@ -186,7 +186,8 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
         .or_else(|_| parsed.map_value("time"))
         .or_else(|_| parsed.map_value("eventTime"))
         .or_else(|_| parsed.map_value("@timestamp"))
-        .or_else(|_| parsed.map_value("Timestamp"))?;
+        .or_else(|_| parsed.map_value("Timestamp"))
+        .or_else(|_| parsed.map_value("ts"))?;
 
     let time: DateTime<Utc> = if let Ok(time_str) = time_json.str_value() {
         DateTime::parse_from_str(&time_str, "%+")
