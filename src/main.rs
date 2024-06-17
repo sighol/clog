@@ -115,7 +115,9 @@ impl LogLine {
             " {:7}",
             self.severity.to_uppercase().color(severity_style).bold()
         )?;
-        writeln!(f, " {}", self.message.color(message_style))?;
+        let message = self.message.replace("\n", "\n    ");
+        let message = message.trim();
+        writeln!(f, " {}", message.color(message_style))?;
         if config.verbose {
             write_logline_map(f, &self.parsed_map, &String::from("  "), &self.message)?;
         }
