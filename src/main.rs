@@ -73,6 +73,32 @@ impl FromStr for Severity {
     }
 }
 
+fn is_too_dark(r: u8, g: u8, b: u8) -> bool {
+    let luma = 0.2126 * (r as f64) + 0.7152 * (g as f64) + 0.0722 * (b as f64); // per ITU-R BT.709
+    luma < 80.0
+}
+
+fn random_color(input: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    input.hash(&mut hasher);
+    let hash_value = hasher.finish();
+    let red = (hash_value & 0xFF) as u8;
+    let green = ((hash_value >> 8) & 0xFF) as u8;
+    let blue = ((hash_value >> 16) & 0xFF) as u8;
+    let bold = if ((hash_value >> 24) & 0x1) == 0 {
+        "1"
+    } else {
+        ""
+    };
+    let foreground = if is_too_dark(red, green, blue) {
+        "48;2;255;255;255"
+    } else {
+        "40"
+    };
+
+    format!("\x1b[{bold};{foreground};38;2;{red};{green};{blue}m")
+}
+
 impl LogLine {
     fn print<W>(&self, f: &mut W, config: &PrintConfig) -> std::io::Result<()>
     where
@@ -92,17 +118,9 @@ impl LogLine {
         } else if let Some(request_id) = self.value(&self.parsed_map, "context.requestId") {
             let max_len = std::cmp::min(request_id.len(), 8);
             let request_id = request_id[..max_len].to_string();
-            let mut hasher = DefaultHasher::new();
-            request_id.hash(&mut hasher);
-            let hash_value = hasher.finish();
-            let colors = &[
-                "31", "32", "33", "34", "35", "36", "37", "91", "92", "93", "94", "95", "96", "97",
-                "1;31", "1;32", "1;33", "1;34", "1;35", "1;36", "1;37", "1;91", "1;92", "1;93",
-                "1;94", "1;95", "1;96", "1;97",
-            ];
-            let color = colors[(hash_value % colors.len() as u64) as usize];
+            let color = random_color(&request_id);
 
-            write!(f, " [\x1b[{}m{:<8}\x1b[0m]", color, request_id)?;
+            write!(f, " [{color}{:<8}\x1b[0m]", request_id)?;
         }
 
         let extra_colors = vec![Color::BrightBlack, Color::BrightCyan, Color::BrightMagenta];
