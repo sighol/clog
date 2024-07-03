@@ -2,6 +2,9 @@
 mod parser;
 
 use std::collections::HashMap;
+use std::hash::DefaultHasher;
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::io::Write;
 use std::mem::take;
 use std::str::FromStr;
@@ -89,7 +92,17 @@ impl LogLine {
         } else if let Some(request_id) = self.value(&self.parsed_map, "context.requestId") {
             let max_len = std::cmp::min(request_id.len(), 8);
             let request_id = request_id[..max_len].to_string();
-            write!(f, " [{:<8}]", request_id)?;
+            let mut hasher = DefaultHasher::new();
+            request_id.hash(&mut hasher);
+            let hash_value = hasher.finish();
+            let colors = &[
+                "31", "32", "33", "34", "35", "36", "37", "91", "92", "93", "94", "95", "96", "97",
+                "1;31", "1;32", "1;33", "1;34", "1;35", "1;36", "1;37", "1;91", "1;92", "1;93",
+                "1;94", "1;95", "1;96", "1;97",
+            ];
+            let color = colors[(hash_value % colors.len() as u64) as usize];
+
+            write!(f, " [\x1b[{}m{:<8}\x1b[0m]", color, request_id)?;
         }
 
         let extra_colors = vec![Color::BrightBlack, Color::BrightCyan, Color::BrightMagenta];
