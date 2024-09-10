@@ -37,6 +37,7 @@ struct PrintConfig {
     pub extra: Vec<String>,
     pub verbose: bool,
     pub is_local_timezone: bool,
+    pub oneline_maxlength: Option<usize>,
 }
 
 impl PrintConfig {
@@ -146,8 +147,23 @@ impl LogLine {
             " {:7}",
             self.severity.to_uppercase().color(severity_style).bold()
         )?;
-        let message = self.message.replace("\n", "\n    ");
-        let message = message.trim();
+        let message = self.message.trim();
+        let message = if let Some(max_length) = config.oneline_maxlength {
+            let message = message.replace("\n", " \u{2936} ");
+            if message.len() > max_length {
+                let mut end: usize = 0;
+                message
+                    .chars()
+                    .into_iter()
+                    .take(max_length - 3)
+                    .for_each(|x| end += x.len_utf8());
+                format!("{}...", &message[..end])
+            } else {
+                message
+            }
+        } else {
+            message.replace("\n", "\n    ")
+        };
         writeln!(f, " {}", message.color(message_style))?;
         if config.verbose {
             write_logline_map(f, &self.parsed_map, &String::from("  "), &self.message)?;
@@ -418,6 +434,9 @@ struct Cli {
 
     #[arg(long, help = "Output timestamps in UTC")]
     utc: bool,
+
+    #[arg(long = "oneline")]
+    oneline: bool,
 }
 
 #[derive(ClapValueEnum, Clone, Debug)]
@@ -441,6 +460,7 @@ fn main() -> eyre::Result<()> {
         extra: args.extra,
         is_local_timezone: !args.utc,
         verbose: args.verbose,
+        oneline_maxlength: if args.oneline { Some(100) } else { None },
     };
 
     let mut parser = Parser::new();
@@ -485,6 +505,7 @@ mod test {
                 extra: vec![],
                 is_local_timezone: false,
                 verbose: false,
+                oneline_maxlength: None,
             };
             let mut s = Vec::<u8>::new();
             self.print(&mut s, &config).expect("Fail to write");
@@ -587,6 +608,7 @@ mod test {
                     extra: vec!["reportLocation.modulePath".to_string()],
                     verbose: false,
                     is_local_timezone: false,
+                    oneline_maxlength: None,
                 },
             )
             .unwrap();
@@ -632,6 +654,7 @@ mod test {
                     extra: vec!["callsite.module".to_string()],
                     verbose: false,
                     is_local_timezone: false,
+                    oneline_maxlength: None,
                 },
             )
             .unwrap();
@@ -677,6 +700,7 @@ mod test {
                     extra: vec!["callsite.module".to_string()],
                     verbose: true,
                     is_local_timezone: false,
+                    oneline_maxlength: None,
                 },
             )
             .unwrap();
