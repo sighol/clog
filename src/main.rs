@@ -52,6 +52,7 @@ impl PrintConfig {
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone)]
 enum Severity {
+    Tracing,
     Debug,
     Info,
     Warning,
@@ -64,6 +65,7 @@ impl FromStr for Severity {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         return match s.to_lowercase().as_ref() {
+            "tracing" | "trace" => Ok(Self::Tracing),
             "debug" => Ok(Self::Debug),
             "info" => Ok(Self::Info),
             "warn" | "warning" => Ok(Self::Warning),
@@ -135,6 +137,7 @@ impl LogLine {
         }
 
         let (severity_style, message_style) = match self.severity() {
+            Severity::Tracing => (Color::BrightBlack, Color::BrightBlack),
             Severity::Debug => (Color::BrightBlack, Color::BrightBlack),
             Severity::Info => (Color::BrightBlack, Color::White),
             Severity::Warning => (Color::Yellow, Color::Yellow),
@@ -203,8 +206,10 @@ impl LogLine {
             Severity::Warning
         } else if severity.contains("error") || severity.contains("critical") {
             Severity::Error
-        } else if severity.contains("debug") || severity.contains("trace") {
+        } else if severity.contains("debug") {
             Severity::Debug
+        } else if severity.contains("trace") || severity.contains("tracing") {
+            Severity::Tracing
         } else if severity.contains("fatal") {
             Severity::Fatal
         } else {
