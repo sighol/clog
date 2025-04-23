@@ -236,7 +236,14 @@ where
         let value = match &map[key] {
             JsonValue::Null => None,
             JsonValue::Num(n) => Some(format!("{}", n)),
-            JsonValue::Str(s) => Some(format!("{}", s)),
+            JsonValue::Str(s) => {
+                if s.contains("\n") {
+                    let line_prefix = format!("\n{indent}  ");
+                    Some(format!("{line_prefix}{}", s.replace("\n", &line_prefix)))
+                } else {
+                    Some(format!("{s}"))
+                }
+            }
             JsonValue::Bool(b) => Some(format!("{}", b)),
             JsonValue::Array(value) => Some(format!("{:?}", value)),
             JsonValue::Object(map) => {
