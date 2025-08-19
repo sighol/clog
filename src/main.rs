@@ -29,7 +29,6 @@ use clap::ValueEnum as ClapValueEnum;
 struct LogLine {
     pub time: DateTime<Utc>,
     pub severity: String,
-    pub message: String,
     pub parsed_map: HashMap<String, JsonValue>,
 }
 
@@ -150,28 +149,63 @@ impl LogLine {
             " {:7}",
             self.severity.to_uppercase().color(severity_style).bold()
         )?;
-        let message = self.message.trim();
-        let message = if let Some(max_length) = config.oneline_maxlength {
-            let message = message.replace("\n", " \u{2936} ");
-            if message.len() > max_length {
-                let mut end: usize = 0;
-                message
-                    .chars()
-                    .into_iter()
-                    .take(max_length - 3)
-                    .for_each(|x| end += x.len_utf8());
-                format!("{}...", &message[..end])
-            } else {
-                message
-            }
-        } else {
-            message.replace("\n", "\n    ")
-        };
+        let (message_path, message) = self
+            .get_message(config)
+            .map(|x| (Some(x.0), x.1))
+            .unwrap_or((None, String::new()));
+
         writeln!(f, " {}", message.color(message_style))?;
         if config.verbose {
-            write_logline_map(f, &self.parsed_map, &String::from("  "), &self.message)?;
+            write_logline_map(f, &self.parsed_map, &String::from("  "), message_path)?;
         }
         Ok(())
+    }
+
+    fn get_message(&self, config: &PrintConfig) -> Option<(&'static str, String)> {
+        let search_places = ["message", "msg", "event", "MessageTemplate"];
+        for sp in search_places {
+            if let Some(value) = self.parsed_map.get(sp) {
+                if let Ok(str_value) = value.str_value() {
+                    // Add info from exc_info
+                    let exception_message =
+                        if let Some(exception_message) = self.parsed_map.get("exc_info") {
+                            if let Ok(exception_message) = exception_message.str_value() {
+                                Some(exception_message)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+
+                    let message = match exception_message {
+                        Some(exc) => format!("{}\n{}", str_value, exc),
+                        None => str_value,
+                    };
+
+                    let message = message.trim();
+                    let message = if let Some(max_length) = config.oneline_maxlength {
+                        let message = message.replace("\n", " \u{2936} ");
+                        if message.len() > max_length {
+                            let mut end: usize = 0;
+                            message
+                                .chars()
+                                .into_iter()
+                                .take(max_length - 3)
+                                .for_each(|x| end += x.len_utf8());
+                            format!("{}...", &message[..end])
+                        } else {
+                            message
+                        }
+                    } else {
+                        message.replace("\n", "\n    ")
+                    };
+
+                    return Some((sp, message));
+                }
+            }
+        }
+        return None;
     }
 
     fn value(&self, map: &HashMap<String, JsonValue>, key: &str) -> Option<String> {
@@ -222,7 +256,7 @@ fn write_logline_map<W>(
     f: &mut W,
     map: &HashMap<String, JsonValue>,
     indent: &str,
-    message: &str,
+    message_path: Option<&str>,
 ) -> std::io::Result<()>
 where
     W: Write,
@@ -249,13 +283,13 @@ where
             JsonValue::Object(map) => {
                 if map.len() != 0 {
                     writeln!(f, "{}{}:", indent, key.bright_black())?;
-                    write_logline_map(f, map, &format!("  {}", indent), message)?;
+                    write_logline_map(f, map, &format!("  {}", indent), message_path)?;
                 }
                 None
             }
         };
         if let Some(value) = value {
-            if value != message {
+            if Some(key.as_str()) != message_path {
                 writeln!(f, "{}{} = {}", indent, key.bright_black(), value)?;
             }
         }
@@ -313,19 +347,6 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
         .or_else(|_| parsed.map_value("log.level").and_then(|x| x.str_value()))
         .unwrap_or_else(|_| "unknown".to_string());
 
-    let message = parsed
-        .map_value("message")
-        .or_else(|_| parsed.map_value("msg"))
-        .or_else(|_| parsed.map_value("event"))
-        .or_else(|_| parsed.map_value("MessageTemplate"))
-        .and_then(|x| x.str_value())?;
-
-    let message = if let Ok(exception_message) = parsed.map_value("exc_info") {
-        format!("{}\n{}", message, exception_message.str_value()?)
-    } else {
-        message
-    };
-
     let map = match parsed {
         JsonValue::Object(map) => map,
         _ => bail!("Parsed is not a map"),
@@ -333,7 +354,6 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
 
     Ok(LogLine {
         time,
-        message,
         severity,
         parsed_map: map,
     })
