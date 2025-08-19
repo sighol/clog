@@ -154,7 +154,9 @@ impl LogLine {
             .map(|x| (Some(x.0), x.1))
             .unwrap_or((None, String::new()));
 
-        writeln!(f, " {}", message.color(message_style))?;
+        for line in message.lines() {
+            writeln!(f, " {}", line.color(message_style))?;
+        }
         if config.verbose {
             write_logline_map(f, &self.parsed_map, &String::from("  "), message_path)?;
         }
