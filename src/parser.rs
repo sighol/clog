@@ -4,9 +4,9 @@ use std::str;
 use eyre::{eyre, Result};
 use nom::{
     branch::alt,
-    bytes::streaming::{tag, take_while},
+    bytes::streaming::{tag, take_while, take_while1},
     character::streaming::char,
-    combinator::{cut, map, value},
+    combinator::{cut, map, opt, value},
     error::{Error, ErrorKind, ParseError},
     multi::separated_list0,
     number::streaming::double,
@@ -22,6 +22,18 @@ pub enum JsonValue {
     Bool(bool),
     Object(HashMap<String, JsonValue>),
     Array(Vec<JsonValue>),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct JsonValueWithSternSource {
+    pub source: Option<PodAndContainer>,
+    pub value: JsonValue,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct PodAndContainer {
+    pub pod: String,
+    pub container: String,
 }
 
 impl JsonValue {
@@ -117,8 +129,31 @@ fn json_value<'a>(i: &'a str) -> IResult<&'a str, JsonValue> {
     )(i)
 }
 
-pub fn root<'a>(i: &'a str) -> IResult<&'a str, JsonValue> {
-    preceded(space, map(hash, JsonValue::Object))(i)
+pub fn root<'a>(i: &'a str) -> IResult<&'a str, JsonValueWithSternSource> {
+    let (rest, _) = opt(space)(i)?;
+    let (rest, pod_and_container) = opt(pod_and_container)(rest)?;
+    let (rest, hashed) = preceded(space, hash)(rest)?;
+    let json_value = JsonValue::Object(hashed);
+    let result = JsonValueWithSternSource {
+        source: pod_and_container,
+        value: json_value,
+    };
+    Ok((rest, result))
+}
+
+fn pod_and_container<'a>(i: &'a str) -> IResult<&'a str, PodAndContainer> {
+    let (rest, pod) = k8s_name(i)?;
+    let (rest, container) = preceded(space, k8s_name)(rest)?;
+    let result = PodAndContainer {
+        pod: pod.to_string(),
+        container: container.to_string(),
+    };
+    Ok((rest, result))
+}
+
+fn k8s_name<'a>(i: &'a str) -> IResult<&'a str, &'a str> {
+    let is_word_char = |c: char| c.is_alphanumeric() || c == '_' || c == '-';
+    take_while1(is_word_char)(i)
 }
 
 fn string<'a>(i: &'a str) -> IResult<&'a str, String> {
@@ -199,6 +234,16 @@ mod test {
 
         assert_eq!(esc("123;123"), Ok((";123", "123")));
         assert_eq!(esc("12\\\"34;"), Ok((";", "12\\\"34")));
+    }
+
+    #[test]
+    fn test_line_with_preceeding_pod_and_container() {
+        let input = r#"timeseries-dms-sync-6c96fdcd76-ss88k timeseries-dms-sync {"timestamp":{"seconds":1760623406,"nanos":540000000},"severity":"INFO","message":"[POST] 500 /_handle_batch [9 ms]","sourceLocation":{"file":"CallLogging.kt","line":"48","function":"io.ktor.server.plugins.calllogging.CallLoggingKt.CallLogging$lambda$0$log"},"context":{"requestId":"ad560ee4-e861-4ff1-a29b-9669acff66fa"},"loggerName":"io.ktor.server.Application","logging.googleapis.com/trace":"projects/unknown/traces/ad560ee4-e861-4ff1-a29b-9669acff66fa"}"#;
+        let (rest, value) = root(input).unwrap();
+        assert_eq!("", rest);
+        let source = value.source.unwrap();
+        assert_eq!("timeseries-dms-sync-6c96fdcd76-ss88k", source.pod);
+        assert_eq!("timeseries-dms-sync", source.container);
     }
 
     #[test]

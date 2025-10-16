@@ -20,7 +20,7 @@ use eyre::bail;
 use eyre::eyre;
 use eyre::Context;
 
-use parser::{root, JsonValue};
+use parser::{root, JsonValue, JsonValueWithSternSource};
 
 use clap::Parser as ClapParser;
 use clap::ValueEnum as ClapValueEnum;
@@ -310,18 +310,20 @@ fn bunyan_to_level(level: i32) -> &'static str {
     }
 }
 
-fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
-    let parsed = match parsed {
+fn get_log_line(parsed: JsonValueWithSternSource) -> Result<LogLine> {
+    let parsed = match parsed.value {
         JsonValue::Object(_) => parsed,
         _ => bail!("parsed is not a JsonValue::Object"),
     };
-    let time_json = parsed
+    let source = parsed.source;
+    let json = parsed.value;
+    let time_json = json
         .map_value("timestamp")
-        .or_else(|_| parsed.map_value("time"))
-        .or_else(|_| parsed.map_value("eventTime"))
-        .or_else(|_| parsed.map_value("@timestamp"))
-        .or_else(|_| parsed.map_value("Timestamp"))
-        .or_else(|_| parsed.map_value("ts"))?;
+        .or_else(|_| json.map_value("time"))
+        .or_else(|_| json.map_value("eventTime"))
+        .or_else(|_| json.map_value("@timestamp"))
+        .or_else(|_| json.map_value("Timestamp"))
+        .or_else(|_| json.map_value("ts"))?;
 
     let time: DateTime<Utc> = if let Ok(time_str) = time_json.str_value() {
         DateTime::parse_from_str(&time_str, "%+")
@@ -336,22 +338,25 @@ fn get_log_line(parsed: JsonValue) -> Result<LogLine> {
         start + duration
     };
 
-    let severity = parsed
+    let severity = json
         .map_value("severity")
         .and_then(|x| x.str_value())
         .or_else(|_| {
-            parsed
-                .map_value("level")
+            json.map_value("level")
                 .and_then(|level| level.int_value())
                 .and_then(|level| Ok(bunyan_to_level(level as i32).to_string()))
         })
-        .or_else(|_| parsed.map_value("level").and_then(|x| x.str_value()))
-        .or_else(|_| parsed.map_value("log.level").and_then(|x| x.str_value()))
+        .or_else(|_| json.map_value("level").and_then(|x| x.str_value()))
+        .or_else(|_| json.map_value("log.level").and_then(|x| x.str_value()))
         .unwrap_or_else(|_| "unknown".to_string());
 
-    let map = match parsed {
+    let mut map = match json {
         JsonValue::Object(map) => map,
         _ => bail!("Parsed is not a map"),
+    };
+    if let Some(source) = source {
+        map.insert("pod".to_string(), JsonValue::Str(source.pod));
+        map.insert("container".to_string(), JsonValue::Str(source.container));
     };
 
     Ok(LogLine {
@@ -788,8 +793,8 @@ mod test {
         before();
         let mut parser = Parser::new();
         assert_eq!(
-            ParserOutput::Text("Hello world".to_string()).to_string(),
-            parser.push("Hello world")[0].to_string()
+            ParserOutput::Text("Hello world bla".to_string()).to_string(),
+            parser.push("Hello world bla")[0].to_string()
         );
     }
 }
