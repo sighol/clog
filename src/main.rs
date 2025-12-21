@@ -317,43 +317,27 @@ fn get_log_line(parsed: JsonValueWithSternSource) -> Result<LogLine> {
     };
     let source = parsed.source;
     let json = parsed.value;
-    let time_json = json
-        .map_value("timestamp")
-        .or_else(|_| json.map_value("time"))
-        .or_else(|_| json.map_value("eventTime"))
-        .or_else(|_| json.map_value("@timestamp"))
-        .or_else(|_| json.map_value("Timestamp"))
-        .or_else(|_| json.map_value("ts"))?;
-
-    let time: DateTime<Utc> = if let Ok(time_str) = time_json.str_value() {
-        DateTime::parse_from_str(&time_str, "%+")
-            .map(|dt| dt.with_timezone(&Utc))
-            .context(format!("Failed to parse datetime: `{}`", &time_str))?
-    } else {
-        let seconds_value = time_json.map_value("seconds")?.int_value()?;
-        let nanos_value = time_json.map_value("nanos")?.int_value()?;
-        let start = Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap();
-        let duration = Duration::try_seconds(seconds_value as i64).unwrap()
-            + Duration::nanoseconds(nanos_value as i64);
-        start + duration
-    };
-
-    let severity = json
-        .map_value("severity")
-        .and_then(|x| x.str_value())
-        .or_else(|_| {
-            json.map_value("level")
-                .and_then(|level| level.int_value())
-                .and_then(|level| Ok(bunyan_to_level(level as i32).to_string()))
-        })
-        .or_else(|_| json.map_value("level").and_then(|x| x.str_value()))
-        .or_else(|_| json.map_value("log.level").and_then(|x| x.str_value()))
-        .unwrap_or_else(|_| "unknown".to_string());
-
     let mut map = match json {
         JsonValue::Object(map) => map,
         _ => bail!("Parsed is not a map"),
     };
+
+    let (time_keyword, time) = get_time(&map)?;
+    map.remove(&time_keyword);
+
+    let severity = match map.get("severity").and_then(|x| x.str_value().ok()) {
+        Some(severity) => severity.to_string(),
+        None => map
+            .get("level")
+            .or_else(|| map.get("log.level"))
+            .and_then(|level| match level {
+                JsonValue::Str(x) => Some(x.to_string()),
+                JsonValue::Num(x) => Some(bunyan_to_level(*x as i32).to_string()),
+                _ => None,
+            })
+            .unwrap_or_else(|| "unknown".to_string()),
+    };
+
     if let Some(source) = source {
         map.insert("pod".to_string(), JsonValue::Str(source.pod));
         map.insert("container".to_string(), JsonValue::Str(source.container));
@@ -364,6 +348,36 @@ fn get_log_line(parsed: JsonValueWithSternSource) -> Result<LogLine> {
         severity,
         parsed_map: map,
     })
+}
+
+fn get_time(value: &HashMap<String, JsonValue>) -> Result<(String, DateTime<Utc>)> {
+    let types = [
+        "timestamp",
+        "time",
+        "eventTime",
+        "@timestamp",
+        "Timestamp",
+        "ts",
+    ];
+    for keyword in types.iter() {
+        let Some(time_json) = value.get(*keyword) else {
+            continue;
+        };
+        let time: DateTime<Utc> = if let Ok(time_str) = time_json.str_value() {
+            DateTime::parse_from_str(&time_str, "%+")
+                .map(|dt| dt.with_timezone(&Utc))
+                .context(format!("Failed to parse datetime: `{}`", &time_str))?
+        } else {
+            let seconds_value = time_json.map_value("seconds")?.num_value()?;
+            let nanos_value = time_json.map_value("nanos")?.num_value()?;
+            let start = Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap();
+            let duration = Duration::try_seconds(seconds_value as i64).unwrap()
+                + Duration::nanoseconds(nanos_value as i64);
+            start + duration
+        };
+        return Ok((keyword.to_string(), time));
+    }
+    bail!("Found timestamp");
 }
 
 #[derive(Debug)]

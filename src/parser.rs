@@ -49,7 +49,7 @@ impl JsonValue {
         }
     }
 
-    pub fn int_value(&self) -> Result<f64> {
+    pub fn num_value(&self) -> Result<f64> {
         match self {
             JsonValue::Num(x) => Ok(*x as f64),
             _ => Err(eyre!("int_value on non-numeric")),
