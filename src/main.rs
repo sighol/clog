@@ -9,18 +9,18 @@ use std::io::Write;
 use std::mem::take;
 use std::str::FromStr;
 
-use chrono::prelude::*;
 use chrono::DateTime;
 use chrono::Duration;
 use chrono::Local;
 use chrono::Utc;
+use chrono::prelude::*;
 use color_eyre::Result;
 use colored::{Color, Colorize};
+use eyre::Context;
 use eyre::bail;
 use eyre::eyre;
-use eyre::Context;
 
-use parser::{root, JsonValue, JsonValueWithSternSource};
+use parser::{JsonValue, JsonValueWithSternSource, root};
 
 use clap::Parser as ClapParser;
 use clap::ValueEnum as ClapValueEnum;
@@ -117,7 +117,10 @@ impl LogLine {
             let max_len = std::cmp::min(process_id.len(), 6);
             let process_id = process_id[..max_len].to_string();
             write!(f, " [p={:6}]", process_id.bold())?;
-        } else if let Some(request_id) = self.value(&self.parsed_map, "context.requestId") {
+        } else if let Some(request_id) = self
+            .value(&self.parsed_map, "context.requestId")
+            .or_else(|| self.value(&self.parsed_map, "context.request_id"))
+        {
             let max_len = std::cmp::min(request_id.len(), 8);
             let request_id = request_id[..max_len].to_string();
             let color = random_color(&request_id);
