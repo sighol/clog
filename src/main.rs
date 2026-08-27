@@ -9,18 +9,18 @@ use std::io::Write;
 use std::mem::take;
 use std::str::FromStr;
 
+use chrono::prelude::*;
 use chrono::DateTime;
 use chrono::Duration;
 use chrono::Local;
 use chrono::Utc;
-use chrono::prelude::*;
 use color_eyre::Result;
 use colored::{Color, Colorize};
-use eyre::Context;
 use eyre::bail;
 use eyre::eyre;
+use eyre::Context;
 
-use parser::{JsonValue, JsonValueWithSternSource, root};
+use parser::{root, JsonValue, JsonValueWithSternSource};
 
 use clap::Parser as ClapParser;
 use clap::ValueEnum as ClapValueEnum;
@@ -157,8 +157,13 @@ impl LogLine {
             .map(|x| (Some(x.0), x.1))
             .unwrap_or((None, String::new()));
 
+        let mut i = 0;
         for line in message.lines() {
+            i += 1;
             writeln!(f, " {}", line.color(message_style))?;
+        }
+        if i == 0 {
+            writeln!(f)?;
         }
         if config.verbose {
             write_logline_map(f, &self.parsed_map, &String::from("  "), message_path)?;
